@@ -157,3 +157,70 @@ The following features are intentionally excluded from Version 1.0 but are expec
 - AWS deployment
 - Observability and tracing
 - A web-based dashboard
+
+---
+
+# 8. Development Phases
+
+The project will be developed incrementally. Each phase should result in a working application.
+
+## Phase 1 - MVP
+
+Goal:
+
+Demonstrate the complete agentic workflow locally.
+
+The application should:
+
+- Run from the command line
+- Research Finance, AI, and Sports news
+- Select one story from each domain
+- Choose the best overall story
+- Generate social media content
+- Generate an image
+- Save the generated output locally
+
+This phase intentionally excludes production infrastructure.
+
+---
+
+## Phase 2 - Application
+
+Transform the MVP into a production-style application.
+
+Add:
+
+- FastAPI
+- Docker
+- Configuration management
+- Logging
+- Better error handling
+- Testing
+
+---
+
+## Phase 3 - Cloud Deployment
+
+Deploy the application to AWS.
+
+Potential additions include:
+
+- EventBridge scheduling
+- Amazon S3
+- Amazon RDS
+- Amazon ECS
+- CloudWatch
+- Secrets Manager
+
+---
+
+## Phase 4 - Advanced Features
+
+Potential future improvements include:
+
+- Human-in-the-loop approval
+- Long-term memory
+- Additional publishing platforms
+- Analytics
+- Dashboard
+- Observability
