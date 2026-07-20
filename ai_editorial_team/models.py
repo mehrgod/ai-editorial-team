@@ -1,5 +1,7 @@
 from operator import add
-from typing import Annotated, NotRequired, TypedDict
+from typing import List
+
+from typing_extensions import Annotated, TypedDict
 
 
 class Story(TypedDict):
@@ -10,7 +12,7 @@ class Story(TypedDict):
 
 
 class ResearchResult(TypedDict):
-    stories: list[Story]
+    stories: List[Story]
 
 
 class EditorialDecision(TypedDict):
@@ -18,9 +20,12 @@ class EditorialDecision(TypedDict):
     editorial_reason: str
 
 
-class EditorialState(TypedDict):
+class EditorialStateRequired(TypedDict):
     # Multiple research nodes write stories in parallel; the reducer appends
     # their lists into one candidate set for the Chief Editor Agent.
-    stories: Annotated[list[Story], add]
-    selected_story: NotRequired[Story]
-    editorial_reason: NotRequired[str]
+    stories: Annotated[List[Story], add]
+
+
+class EditorialState(EditorialStateRequired, total=False):
+    selected_story: Story
+    editorial_reason: str

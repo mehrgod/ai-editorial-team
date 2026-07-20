@@ -1,0 +1,9 @@
+[project]
+name = "ai-editorial-team"
+version = "0.1.0"
+description = "Milestone 1 LangGraph orchestration demo for an AI editorial team."
+requires-python = ">=3.10"
+dependencies = [
+    "langgraph>=1.2.0,<2.0.0",
+    "typing_extensions>=4.7.0",
+]
