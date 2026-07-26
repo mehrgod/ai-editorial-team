@@ -15,12 +15,22 @@ def main() -> None:
             f"{required_version}+. Current interpreter: Python {current_version}."
         )
 
-    from ai_editorial_team.output import print_selected_story
-    from ai_editorial_team.workflow import build_editorial_graph
+    from ai_editorial_team.application.workflow import EditorialWorkflow
+    from ai_editorial_team.domain.services import DeterministicChiefEditor
+    from ai_editorial_team.infrastructure.research.mock_agents import (
+        create_ai_research_agent,
+        create_finance_research_agent,
+        create_sports_research_agent,
+    )
+    from ai_editorial_team.presentation.cli import run_cli
 
-    app = build_editorial_graph()
-    result = app.invoke({"stories": []})
-    print_selected_story(result["selected_story"], result["editorial_reason"])
+    workflow = EditorialWorkflow(
+        finance_research_agent=create_finance_research_agent(),
+        ai_research_agent=create_ai_research_agent(),
+        sports_research_agent=create_sports_research_agent(),
+        chief_editor=DeterministicChiefEditor(),
+    )
+    run_cli(workflow)
 
 
 if __name__ == "__main__":
