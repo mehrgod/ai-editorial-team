@@ -17,7 +17,8 @@ def main() -> None:
 
     from ai_editorial_team.application.workflow import EditorialWorkflow
     from ai_editorial_team.domain.services import DeterministicChiefEditor
-    from ai_editorial_team.infrastructure.research.mock_agents import (
+    from ai_editorial_team.infrastructure.research.rss_agents import (
+        RssFeedError,
         create_ai_research_agent,
         create_finance_research_agent,
         create_sports_research_agent,
@@ -30,7 +31,10 @@ def main() -> None:
         sports_research_agent=create_sports_research_agent(),
         chief_editor=DeterministicChiefEditor(),
     )
-    run_cli(workflow)
+    try:
+        run_cli(workflow)
+    except RssFeedError as exc:
+        raise SystemExit(f"Error: {exc}")
 
 
 if __name__ == "__main__":
