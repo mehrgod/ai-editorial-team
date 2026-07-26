@@ -24,16 +24,21 @@ def main() -> None:
         create_sports_research_agent,
     )
     from ai_editorial_team.presentation.cli import run_cli
-
-    workflow = EditorialWorkflow(
-        finance_research_agent=create_finance_research_agent(),
-        ai_research_agent=create_ai_research_agent(),
-        sports_research_agent=create_sports_research_agent(),
-        chief_editor=DeterministicChiefEditor(),
+    from ai_editorial_team.infrastructure.editor.openai_chief_editor import (
+        LLMChiefEditor,
+        OpenAIChiefEditorConfig,
+        OpenAIChiefEditorError,
     )
+
     try:
+        workflow = EditorialWorkflow(
+            finance_research_agent=create_finance_research_agent(),
+            ai_research_agent=create_ai_research_agent(),
+            sports_research_agent=create_sports_research_agent(),
+            chief_editor=LLMChiefEditor(OpenAIChiefEditorConfig.from_env()),
+        )
         run_cli(workflow)
-    except RssFeedError as exc:
+    except (RssFeedError, OpenAIChiefEditorError) as exc:
         raise SystemExit(f"Error: {exc}")
 
 
