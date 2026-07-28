@@ -1,6 +1,8 @@
 from dataclasses import dataclass
 import os
 
+from dotenv import load_dotenv
+
 
 DEFAULT_OPENAI_MODEL = "gpt-5.5"
 
@@ -20,6 +22,7 @@ class OpenAIConfig:
 
     @classmethod
     def from_env(cls) -> "OpenAIConfig":
+        load_dotenv()
         api_key = os.environ.get("OPENAI_API_KEY")
         if not api_key:
             raise OpenAIConfigurationError(
