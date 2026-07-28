@@ -6,6 +6,7 @@ def run_cli(workflow: EditorialWorkflow) -> None:
     result = workflow.run()
     story = result["selected_story"]
     editorial_reason = result["editorial_reason"]
+    instagram_content = result["instagram_content"]
 
     print("\nSelected Story")
     print("==============")
@@ -14,3 +15,6 @@ def run_cli(workflow: EditorialWorkflow) -> None:
     print(f"Summary: {story['summary']}")
     print(f"Story Reason: {story['reason']}")
     print(f"Editorial Reason: {editorial_reason}")
+    print("\nInstagram Caption")
+    print("=================")
+    print(instagram_content["caption"])

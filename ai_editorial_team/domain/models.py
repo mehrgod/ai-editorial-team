@@ -15,7 +15,16 @@ class EditorialDecision(TypedDict):
     editorial_reason: str
 
 
+class InstagramContent(TypedDict):
+    caption: str
+
+
+class EditorialPackage(EditorialDecision):
+    instagram_content: InstagramContent
+
+
 class EditorialState(TypedDict, total=False):
     stories: List[Story]
     selected_story: Story
     editorial_reason: str
+    instagram_content: InstagramContent

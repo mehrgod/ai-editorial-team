@@ -16,6 +16,9 @@ def main() -> None:
         )
 
     from ai_editorial_team.application.workflow import EditorialWorkflow
+    from ai_editorial_team.infrastructure.content.openai_instagram_content_agent import (
+        InstagramContentAgent,
+    )
     from ai_editorial_team.infrastructure.research.rss_agents import (
         RssFeedError,
         create_ai_research_agent,
@@ -40,6 +43,10 @@ def main() -> None:
             ai_research_agent=create_ai_research_agent(),
             sports_research_agent=create_sports_research_agent(),
             chief_editor=LLMChiefEditor(
+                client=openai_bundle.client,
+                model=openai_bundle.model,
+            ),
+            instagram_content_agent=InstagramContentAgent(
                 client=openai_bundle.client,
                 model=openai_bundle.model,
             ),

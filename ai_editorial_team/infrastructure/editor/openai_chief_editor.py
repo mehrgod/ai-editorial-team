@@ -1,15 +1,17 @@
-from datetime import date
 import json
 from typing import List
 
-from openai import OpenAI, OpenAIError
+from openai import OpenAIError
 from pydantic import BaseModel, Field, ValidationError
 
 from ai_editorial_team.domain.models import EditorialDecision, Story
-from ai_editorial_team.infrastructure.openai.config import OpenAIInfrastructureError
+from ai_editorial_team.infrastructure.openai.structured_agent import (
+    OpenAIStructuredAgent,
+    OpenAIStructuredAgentError,
+)
 
 
-class OpenAIChiefEditorError(OpenAIInfrastructureError):
+class OpenAIChiefEditorError(OpenAIStructuredAgentError):
     """Raised when the LLM Chief Editor cannot produce a decision."""
 
 
@@ -22,16 +24,10 @@ class EditorialSelectionResponse(BaseModel):
     )
 
 
-class LLMChiefEditor:
+class LLMChiefEditor(
+    OpenAIStructuredAgent[EditorialSelectionResponse, List[Story], EditorialDecision]
+):
     """OpenAI-powered Chief Editor that implements the domain ChiefEditor port."""
-
-    def __init__(
-        self,
-        client: OpenAI,
-        model: str,
-    ) -> None:
-        self._client = client
-        self._model = model
 
     def select_story(self, stories: List[Story]) -> EditorialDecision:
         if not stories:
@@ -39,58 +35,34 @@ class LLMChiefEditor:
                 "LLM Chief Editor requires at least one candidate story."
             )
 
-        story_options = _build_story_options(stories)
-
-        try:
-            response = self._client.responses.parse(
-                model=self._model,
-                instructions=_editor_instructions(),
-                input=_editor_prompt(story_options),
-                text_format=EditorialSelectionResponse,
-                store=False,
-            )
-        except OpenAIError as exc:
-            raise OpenAIChiefEditorError(
-                f"OpenAI Chief Editor request failed: {exc}"
-            ) from exc
-        except ValidationError as exc:
-            raise OpenAIChiefEditorError(
-                f"OpenAI Chief Editor returned invalid structured output: {exc}"
-            ) from exc
-
-        selection = response.output_parsed
-        if selection is None:
-            raise OpenAIChiefEditorError(
-                "OpenAI Chief Editor did not return structured output."
-            )
-
-        selected_story = _find_selected_story(
-            stories, story_options, selection.selected_story_id
+        return self.run(
+            input_payload=_editor_prompt(_build_story_options(stories)),
+            context=stories,
         )
 
+    def instructions(self) -> str:
+        return _editor_instructions()
+
+    def response_model(self) -> type[EditorialSelectionResponse]:
+        return EditorialSelectionResponse
+
+    def to_domain_result(
+        self, response: EditorialSelectionResponse, context: List[Story]
+    ) -> EditorialDecision:
+        selected_story = _find_selected_story(context, response.selected_story_id)
         return {
             "selected_story": selected_story,
-            "editorial_reason": selection.editorial_reason,
+            "editorial_reason": response.editorial_reason,
         }
 
+    def error_message(self, exc: OpenAIError) -> str:
+        return f"OpenAI Chief Editor request failed: {exc}"
 
-def _editor_instructions() -> str:
-    return (
-        "You are the Chief Editor for an AI-powered editorial team. "
-        "Evaluate the candidate stories and select the single best story for "
-        "today's audience. Consider newsworthiness, broad audience appeal, "
-        "timeliness, potential engagement, and clarity. Return only structured "
-        "JSON matching the provided schema. Do not include free-form text."
-    )
+    def validation_error_message(self, exc: ValidationError) -> str:
+        return f"OpenAI Chief Editor returned invalid structured output: {exc}"
 
-
-def _editor_prompt(story_options: List[dict]) -> str:
-    return (
-        f"Today is {date.today().isoformat()}.\n"
-        "Select exactly one candidate story from this JSON array:\n"
-        f"{json.dumps(story_options, indent=2)}\n"
-        "The selected_story_id must match exactly one provided id."
-    )
+    def empty_output_message(self) -> str:
+        return "OpenAI Chief Editor did not return structured output."
 
 
 def _build_story_options(stories: List[Story]) -> List[dict]:
@@ -106,14 +78,32 @@ def _build_story_options(stories: List[Story]) -> List[dict]:
     ]
 
 
+def _editor_prompt(story_options: List[dict]) -> str:
+    return (
+        "Select exactly one candidate story from this JSON array:\n"
+        f"{json.dumps(story_options, indent=2)}\n"
+        "The selected_story_id must match exactly one provided id."
+    )
+
+
+def _editor_instructions() -> str:
+    return (
+        "You are the Chief Editor for an AI-powered editorial team. "
+        "Evaluate the candidate stories and select the single best story for "
+        "today's audience. Consider newsworthiness, broad audience appeal, "
+        "timeliness, potential engagement, and clarity. Return only structured "
+        "JSON matching the provided schema. Do not include free-form text."
+    )
+
+
 def _find_selected_story(
-    stories: List[Story], story_options: List[dict], selected_story_id: str
+    stories: List[Story], selected_story_id: str
 ) -> Story:
-    for story, option in zip(stories, story_options):
-        if option["id"] == selected_story_id:
+    for index, story in enumerate(stories):
+        if _story_id(index) == selected_story_id:
             return story
 
-    valid_ids = ", ".join(option["id"] for option in story_options)
+    valid_ids = ", ".join(_story_id(index) for index in range(len(stories)))
     raise OpenAIChiefEditorError(
         "OpenAI Chief Editor selected an unknown story id "
         f"'{selected_story_id}'. Expected one of: {valid_ids}."
