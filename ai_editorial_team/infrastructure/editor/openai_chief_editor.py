@@ -1,44 +1,16 @@
-from dataclasses import dataclass
 from datetime import date
 import json
-import os
-from typing import List, Optional
+from typing import List
 
 from openai import OpenAI, OpenAIError
 from pydantic import BaseModel, Field, ValidationError
 
 from ai_editorial_team.domain.models import EditorialDecision, Story
+from ai_editorial_team.infrastructure.openai.config import OpenAIInfrastructureError
 
 
-DEFAULT_OPENAI_MODEL = "gpt-5.5"
-
-
-class OpenAIChiefEditorError(RuntimeError):
+class OpenAIChiefEditorError(OpenAIInfrastructureError):
     """Raised when the LLM Chief Editor cannot produce a decision."""
-
-
-class OpenAIConfigurationError(OpenAIChiefEditorError):
-    """Raised when required OpenAI configuration is missing."""
-
-
-@dataclass(frozen=True)
-class OpenAIChiefEditorConfig:
-    api_key: str
-    model: str = DEFAULT_OPENAI_MODEL
-
-    @classmethod
-    def from_env(cls) -> "OpenAIChiefEditorConfig":
-        api_key = os.environ.get("OPENAI_API_KEY")
-        if not api_key:
-            raise OpenAIConfigurationError(
-                "OPENAI_API_KEY is not set. Set it in your environment before "
-                "running the application."
-            )
-
-        return cls(
-            api_key=api_key,
-            model=os.environ.get("OPENAI_MODEL") or DEFAULT_OPENAI_MODEL,
-        )
 
 
 class EditorialSelectionResponse(BaseModel):
@@ -55,11 +27,11 @@ class LLMChiefEditor:
 
     def __init__(
         self,
-        config: OpenAIChiefEditorConfig,
-        client: Optional[OpenAI] = None,
+        client: OpenAI,
+        model: str,
     ) -> None:
-        self._config = config
-        self._client = client or OpenAI(api_key=config.api_key)
+        self._client = client
+        self._model = model
 
     def select_story(self, stories: List[Story]) -> EditorialDecision:
         if not stories:
@@ -71,7 +43,7 @@ class LLMChiefEditor:
 
         try:
             response = self._client.responses.parse(
-                model=self._config.model,
+                model=self._model,
                 instructions=_editor_instructions(),
                 input=_editor_prompt(story_options),
                 text_format=EditorialSelectionResponse,
