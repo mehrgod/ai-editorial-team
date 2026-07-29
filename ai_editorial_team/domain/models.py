@@ -27,10 +27,15 @@ class ImagePrompt(TypedDict):
     image_prompt: str
 
 
+class GeneratedImage(TypedDict):
+    file_path: str
+
+
 class EditorialPackage(EditorialDecision):
     instagram_content: InstagramContent
     x_content: XContent
     image_prompt: ImagePrompt
+    generated_image: GeneratedImage
 
 
 class EditorialState(TypedDict, total=False):
@@ -40,3 +45,4 @@ class EditorialState(TypedDict, total=False):
     instagram_content: InstagramContent
     x_content: XContent
     image_prompt: ImagePrompt
+    generated_image: GeneratedImage

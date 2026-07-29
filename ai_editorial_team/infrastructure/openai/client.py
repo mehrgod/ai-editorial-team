@@ -11,6 +11,7 @@ class OpenAIClientBundle:
 
     client: OpenAI
     model: str
+    image_model: str
 
 
 def create_openai_client_bundle(
@@ -19,6 +20,7 @@ def create_openai_client_bundle(
     return OpenAIClientBundle(
         client=OpenAI(api_key=config.api_key),
         model=config.model,
+        image_model=config.image_model,
     )
 
 

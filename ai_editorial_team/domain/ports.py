@@ -2,6 +2,7 @@ from typing import List, Protocol
 
 from ai_editorial_team.domain.models import (
     EditorialDecision,
+    GeneratedImage,
     ImagePrompt,
     InstagramContent,
     XContent,
@@ -41,4 +42,11 @@ class ImagePromptAgent(Protocol):
     """Interface for agents that generate image prompts."""
 
     def generate_image_prompt(self, story: Story) -> ImagePrompt:
+        ...
+
+
+class ImageGenerator(Protocol):
+    """Interface for services that generate and store final images."""
+
+    def generate(self, image_prompt: str) -> GeneratedImage:
         ...

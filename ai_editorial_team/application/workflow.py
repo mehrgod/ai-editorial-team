@@ -8,6 +8,7 @@ from typing_extensions import Annotated, TypedDict
 from ai_editorial_team.domain.models import (
     EditorialDecision,
     EditorialPackage,
+    GeneratedImage,
     ImagePrompt,
     InstagramContent,
     XContent,
@@ -15,6 +16,7 @@ from ai_editorial_team.domain.models import (
 )
 from ai_editorial_team.domain.ports import (
     ChiefEditor,
+    ImageGenerator,
     ImagePromptAgent,
     InstagramContentAgent,
     ResearchAgent,
@@ -29,6 +31,7 @@ EDITOR_NODE = "Chief Editor Agent"
 INSTAGRAM_NODE = "Instagram Content Agent"
 X_NODE = "X Content Agent"
 IMAGE_PROMPT_NODE = "Image Prompt Agent"
+IMAGE_GENERATOR_NODE = "Image Generator"
 
 
 class ResearchNodeResult(TypedDict):
@@ -44,6 +47,7 @@ class EditorialGraphState(TypedDict, total=False):
     instagram_content: InstagramContent
     x_content: XContent
     image_prompt: ImagePrompt
+    generated_image: GeneratedImage
 
 
 @dataclass(frozen=True)
@@ -57,6 +61,7 @@ class EditorialWorkflow:
     instagram_content_agent: InstagramContentAgent
     x_content_agent: XContentAgent
     image_prompt_agent: ImagePromptAgent
+    image_generator: ImageGenerator
 
     def run(self) -> EditorialPackage:
         app = self._build_graph()
@@ -67,6 +72,7 @@ class EditorialWorkflow:
             "instagram_content": result["instagram_content"],
             "x_content": result["x_content"],
             "image_prompt": result["image_prompt"],
+            "generated_image": result["generated_image"],
         }
 
     def _build_graph(self):
@@ -83,6 +89,7 @@ class EditorialWorkflow:
         graph.add_node(INSTAGRAM_NODE, self._instagram_content_node)
         graph.add_node(X_NODE, self._x_content_node)
         graph.add_node(IMAGE_PROMPT_NODE, self._image_prompt_node)
+        graph.add_node(IMAGE_GENERATOR_NODE, self._image_generator_node)
 
         graph.add_edge(START, FINANCE_NODE)
         graph.add_edge(START, AI_NODE)
@@ -94,7 +101,8 @@ class EditorialWorkflow:
         graph.add_edge(EDITOR_NODE, INSTAGRAM_NODE)
         graph.add_edge(INSTAGRAM_NODE, X_NODE)
         graph.add_edge(X_NODE, IMAGE_PROMPT_NODE)
-        graph.add_edge(IMAGE_PROMPT_NODE, END)
+        graph.add_edge(IMAGE_PROMPT_NODE, IMAGE_GENERATOR_NODE)
+        graph.add_edge(IMAGE_GENERATOR_NODE, END)
 
         return graph.compile()
 
@@ -132,5 +140,14 @@ class EditorialWorkflow:
         return {
             "image_prompt": self.image_prompt_agent.generate_image_prompt(
                 state["selected_story"]
+            )
+        }
+
+    def _image_generator_node(
+        self, state: EditorialGraphState
+    ) -> dict:
+        return {
+            "generated_image": self.image_generator.generate(
+                state["image_prompt"]["image_prompt"]
             )
         }

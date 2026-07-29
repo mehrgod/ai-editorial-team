@@ -9,6 +9,7 @@ def run_cli(workflow: EditorialWorkflow) -> None:
     instagram_content = result["instagram_content"]
     x_content = result["x_content"]
     image_prompt = result["image_prompt"]
+    generated_image = result["generated_image"]
 
     print("\nSelected Story")
     print("==============")
@@ -26,3 +27,6 @@ def run_cli(workflow: EditorialWorkflow) -> None:
     print("\nImage Prompt")
     print("============")
     print(image_prompt["image_prompt"])
+    print("\nGenerated Image")
+    print("===============")
+    print(f"Path: {generated_image['file_path']}")

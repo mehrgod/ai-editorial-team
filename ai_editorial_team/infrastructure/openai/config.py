@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 
 
 DEFAULT_OPENAI_MODEL = "gpt-5.5"
+DEFAULT_OPENAI_IMAGE_MODEL = "gpt-image-1"
 
 
 class OpenAIInfrastructureError(RuntimeError):
@@ -19,6 +20,7 @@ class OpenAIConfigurationError(OpenAIInfrastructureError):
 class OpenAIConfig:
     api_key: str
     model: str = DEFAULT_OPENAI_MODEL
+    image_model: str = DEFAULT_OPENAI_IMAGE_MODEL
 
     @classmethod
     def from_env(cls) -> "OpenAIConfig":
@@ -33,4 +35,8 @@ class OpenAIConfig:
         return cls(
             api_key=api_key,
             model=os.environ.get("OPENAI_MODEL") or DEFAULT_OPENAI_MODEL,
+            image_model=(
+                os.environ.get("OPENAI_IMAGE_MODEL")
+                or DEFAULT_OPENAI_IMAGE_MODEL
+            ),
         )

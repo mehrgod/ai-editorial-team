@@ -25,6 +25,9 @@ def main() -> None:
     from ai_editorial_team.infrastructure.content.openai_x_content_agent import (
         XContentAgent,
     )
+    from ai_editorial_team.infrastructure.image_generation.openai_image_generator import (
+        OpenAIImageGenerator,
+    )
     from ai_editorial_team.infrastructure.research.rss_agents import (
         RssFeedError,
         create_ai_research_agent,
@@ -63,6 +66,10 @@ def main() -> None:
             image_prompt_agent=ImagePromptAgent(
                 client=openai_bundle.client,
                 model=openai_bundle.model,
+            ),
+            image_generator=OpenAIImageGenerator(
+                client=openai_bundle.client,
+                model=openai_bundle.image_model,
             ),
         )
         run_cli(workflow)
