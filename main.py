@@ -19,6 +19,9 @@ def main() -> None:
     from ai_editorial_team.infrastructure.content.openai_instagram_content_agent import (
         InstagramContentAgent,
     )
+    from ai_editorial_team.infrastructure.content.openai_image_prompt_agent import (
+        ImagePromptAgent,
+    )
     from ai_editorial_team.infrastructure.content.openai_x_content_agent import (
         XContentAgent,
     )
@@ -54,6 +57,10 @@ def main() -> None:
                 model=openai_bundle.model,
             ),
             x_content_agent=XContentAgent(
+                client=openai_bundle.client,
+                model=openai_bundle.model,
+            ),
+            image_prompt_agent=ImagePromptAgent(
                 client=openai_bundle.client,
                 model=openai_bundle.model,
             ),

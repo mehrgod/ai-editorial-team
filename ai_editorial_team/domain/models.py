@@ -23,9 +23,14 @@ class XContent(TypedDict):
     post: str
 
 
+class ImagePrompt(TypedDict):
+    image_prompt: str
+
+
 class EditorialPackage(EditorialDecision):
     instagram_content: InstagramContent
     x_content: XContent
+    image_prompt: ImagePrompt
 
 
 class EditorialState(TypedDict, total=False):
@@ -34,3 +39,4 @@ class EditorialState(TypedDict, total=False):
     editorial_reason: str
     instagram_content: InstagramContent
     x_content: XContent
+    image_prompt: ImagePrompt
