@@ -3,6 +3,7 @@ from typing import List, Protocol
 from ai_editorial_team.domain.models import (
     EditorialDecision,
     InstagramContent,
+    XContent,
     Story,
 )
 
@@ -25,4 +26,11 @@ class InstagramContentAgent(Protocol):
     """Interface for agents that generate Instagram content."""
 
     def generate_caption(self, story: Story) -> InstagramContent:
+        ...
+
+
+class XContentAgent(Protocol):
+    """Interface for agents that generate X content."""
+
+    def generate_post(self, story: Story) -> XContent:
         ...

@@ -19,8 +19,13 @@ class InstagramContent(TypedDict):
     caption: str
 
 
+class XContent(TypedDict):
+    post: str
+
+
 class EditorialPackage(EditorialDecision):
     instagram_content: InstagramContent
+    x_content: XContent
 
 
 class EditorialState(TypedDict, total=False):
@@ -28,3 +33,4 @@ class EditorialState(TypedDict, total=False):
     selected_story: Story
     editorial_reason: str
     instagram_content: InstagramContent
+    x_content: XContent

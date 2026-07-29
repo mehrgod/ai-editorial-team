@@ -9,12 +9,14 @@ from ai_editorial_team.domain.models import (
     EditorialDecision,
     EditorialPackage,
     InstagramContent,
+    XContent,
     Story,
 )
 from ai_editorial_team.domain.ports import (
     ChiefEditor,
     InstagramContentAgent,
     ResearchAgent,
+    XContentAgent,
 )
 
 
@@ -23,6 +25,7 @@ AI_NODE = "AI Research Agent"
 SPORTS_NODE = "Sports Research Agent"
 EDITOR_NODE = "Chief Editor Agent"
 INSTAGRAM_NODE = "Instagram Content Agent"
+X_NODE = "X Content Agent"
 
 
 class ResearchNodeResult(TypedDict):
@@ -36,6 +39,7 @@ class EditorialGraphState(TypedDict, total=False):
     selected_story: Story
     editorial_reason: str
     instagram_content: InstagramContent
+    x_content: XContent
 
 
 @dataclass(frozen=True)
@@ -47,6 +51,7 @@ class EditorialWorkflow:
     sports_research_agent: ResearchAgent
     chief_editor: ChiefEditor
     instagram_content_agent: InstagramContentAgent
+    x_content_agent: XContentAgent
 
     def run(self) -> EditorialPackage:
         app = self._build_graph()
@@ -55,6 +60,7 @@ class EditorialWorkflow:
             "selected_story": result["selected_story"],
             "editorial_reason": result["editorial_reason"],
             "instagram_content": result["instagram_content"],
+            "x_content": result["x_content"],
         }
 
     def _build_graph(self):
@@ -69,6 +75,7 @@ class EditorialWorkflow:
         )
         graph.add_node(EDITOR_NODE, self._chief_editor_node)
         graph.add_node(INSTAGRAM_NODE, self._instagram_content_node)
+        graph.add_node(X_NODE, self._x_content_node)
 
         graph.add_edge(START, FINANCE_NODE)
         graph.add_edge(START, AI_NODE)
@@ -78,7 +85,8 @@ class EditorialWorkflow:
         graph.add_edge(AI_NODE, EDITOR_NODE)
         graph.add_edge(SPORTS_NODE, EDITOR_NODE)
         graph.add_edge(EDITOR_NODE, INSTAGRAM_NODE)
-        graph.add_edge(INSTAGRAM_NODE, END)
+        graph.add_edge(INSTAGRAM_NODE, X_NODE)
+        graph.add_edge(X_NODE, END)
 
         return graph.compile()
 
@@ -101,6 +109,13 @@ class EditorialWorkflow:
     ) -> dict:
         return {
             "instagram_content": self.instagram_content_agent.generate_caption(
+                state["selected_story"]
+            )
+        }
+
+    def _x_content_node(self, state: EditorialGraphState) -> dict:
+        return {
+            "x_content": self.x_content_agent.generate_post(
                 state["selected_story"]
             )
         }

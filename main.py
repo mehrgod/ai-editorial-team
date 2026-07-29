@@ -19,6 +19,9 @@ def main() -> None:
     from ai_editorial_team.infrastructure.content.openai_instagram_content_agent import (
         InstagramContentAgent,
     )
+    from ai_editorial_team.infrastructure.content.openai_x_content_agent import (
+        XContentAgent,
+    )
     from ai_editorial_team.infrastructure.research.rss_agents import (
         RssFeedError,
         create_ai_research_agent,
@@ -47,6 +50,10 @@ def main() -> None:
                 model=openai_bundle.model,
             ),
             instagram_content_agent=InstagramContentAgent(
+                client=openai_bundle.client,
+                model=openai_bundle.model,
+            ),
+            x_content_agent=XContentAgent(
                 client=openai_bundle.client,
                 model=openai_bundle.model,
             ),
