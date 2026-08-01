@@ -1,6 +1,6 @@
 from typing import List
 
-from typing_extensions import TypedDict
+from typing_extensions import NotRequired, TypedDict
 
 
 class Story(TypedDict):
@@ -37,8 +37,9 @@ class StoredImage(TypedDict):
 
 
 class PublicationRequest(TypedDict):
-    caption: str
-    image_url: str
+    caption: NotRequired[str]
+    image_url: NotRequired[str]
+    text: NotRequired[str]
 
 
 class PublicationResult(TypedDict):
@@ -53,7 +54,8 @@ class EditorialPackage(EditorialDecision):
     image_prompt: ImagePrompt
     generated_image: GeneratedImage
     stored_image: StoredImage
-    publication_result: PublicationResult
+    instagram_publication_result: PublicationResult
+    x_publication_result: PublicationResult
 
 
 class EditorialState(TypedDict, total=False):
@@ -65,4 +67,5 @@ class EditorialState(TypedDict, total=False):
     image_prompt: ImagePrompt
     generated_image: GeneratedImage
     stored_image: StoredImage
-    publication_result: PublicationResult
+    instagram_publication_result: PublicationResult
+    x_publication_result: PublicationResult

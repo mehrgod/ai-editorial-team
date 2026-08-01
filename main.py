@@ -36,6 +36,10 @@ def main() -> None:
         InstagramPublishingError,
         create_instagram_publisher_from_env,
     )
+    from ai_editorial_team.infrastructure.publishing.x_publisher import (
+        XPublishingError,
+        create_x_publisher_from_env,
+    )
     from ai_editorial_team.infrastructure.research.rss_agents import (
         RssFeedError,
         create_ai_research_agent,
@@ -80,7 +84,8 @@ def main() -> None:
                 model=openai_bundle.image_model,
             ),
             image_storage=create_s3_image_storage_from_env(),
-            social_publisher=create_instagram_publisher_from_env(),
+            instagram_publisher=create_instagram_publisher_from_env(),
+            x_publisher=create_x_publisher_from_env(),
         )
         run_cli(workflow)
     except (
@@ -88,6 +93,7 @@ def main() -> None:
         InstagramPublishingError,
         OpenAIInfrastructureError,
         S3ImageStorageError,
+        XPublishingError,
     ) as exc:
         raise SystemExit(f"Error: {exc}")
 

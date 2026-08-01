@@ -38,6 +38,7 @@ IMAGE_PROMPT_NODE = "Image Prompt Agent"
 IMAGE_GENERATOR_NODE = "Image Generator"
 S3_IMAGE_STORAGE_NODE = "S3 Image Storage"
 INSTAGRAM_PUBLISHER_NODE = "Instagram Publisher"
+X_PUBLISHER_NODE = "X Publisher"
 
 
 class ResearchNodeResult(TypedDict):
@@ -55,7 +56,8 @@ class EditorialGraphState(TypedDict, total=False):
     image_prompt: ImagePrompt
     generated_image: GeneratedImage
     stored_image: StoredImage
-    publication_result: PublicationResult
+    instagram_publication_result: PublicationResult
+    x_publication_result: PublicationResult
 
 
 @dataclass(frozen=True)
@@ -71,7 +73,8 @@ class EditorialWorkflow:
     image_prompt_agent: ImagePromptAgent
     image_generator: ImageGenerator
     image_storage: ImageStorage
-    social_publisher: SocialPublisher
+    instagram_publisher: SocialPublisher
+    x_publisher: SocialPublisher
 
     def run(self) -> EditorialPackage:
         app = self._build_graph()
@@ -84,7 +87,10 @@ class EditorialWorkflow:
             "image_prompt": result["image_prompt"],
             "generated_image": result["generated_image"],
             "stored_image": result["stored_image"],
-            "publication_result": result["publication_result"],
+            "instagram_publication_result": result[
+                "instagram_publication_result"
+            ],
+            "x_publication_result": result["x_publication_result"],
         }
 
     def _build_graph(self):
@@ -104,6 +110,7 @@ class EditorialWorkflow:
         graph.add_node(IMAGE_GENERATOR_NODE, self._image_generator_node)
         graph.add_node(S3_IMAGE_STORAGE_NODE, self._s3_image_storage_node)
         graph.add_node(INSTAGRAM_PUBLISHER_NODE, self._instagram_publisher_node)
+        graph.add_node(X_PUBLISHER_NODE, self._x_publisher_node)
 
         graph.add_edge(START, FINANCE_NODE)
         graph.add_edge(START, AI_NODE)
@@ -118,7 +125,8 @@ class EditorialWorkflow:
         graph.add_edge(IMAGE_PROMPT_NODE, IMAGE_GENERATOR_NODE)
         graph.add_edge(IMAGE_GENERATOR_NODE, S3_IMAGE_STORAGE_NODE)
         graph.add_edge(S3_IMAGE_STORAGE_NODE, INSTAGRAM_PUBLISHER_NODE)
-        graph.add_edge(INSTAGRAM_PUBLISHER_NODE, END)
+        graph.add_edge(INSTAGRAM_PUBLISHER_NODE, X_PUBLISHER_NODE)
+        graph.add_edge(X_PUBLISHER_NODE, END)
 
         return graph.compile()
 
@@ -177,10 +185,17 @@ class EditorialWorkflow:
 
     def _instagram_publisher_node(self, state: EditorialGraphState) -> dict:
         return {
-            "publication_result": self.social_publisher.publish(
+            "instagram_publication_result": self.instagram_publisher.publish(
                 {
                     "caption": state["instagram_content"]["caption"],
                     "image_url": state["stored_image"]["public_url"],
                 }
+            )
+        }
+
+    def _x_publisher_node(self, state: EditorialGraphState) -> dict:
+        return {
+            "x_publication_result": self.x_publisher.publish(
+                {"text": state["x_content"]["post"]}
             )
         }

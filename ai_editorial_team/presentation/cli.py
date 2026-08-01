@@ -11,7 +11,8 @@ def run_cli(workflow: EditorialWorkflow) -> None:
     image_prompt = result["image_prompt"]
     generated_image = result["generated_image"]
     stored_image = result["stored_image"]
-    publication_result = result["publication_result"]
+    instagram_publication_result = result["instagram_publication_result"]
+    x_publication_result = result["x_publication_result"]
 
     print("\nSelected Story")
     print("==============")
@@ -38,6 +39,14 @@ def run_cli(workflow: EditorialWorkflow) -> None:
     print(f"URL: {stored_image['public_url']}")
     print("\nInstagram Published")
     print("===================")
-    print(f"Platform: {publication_result['platform']}")
-    print(f"Publication ID: {publication_result['publication_id']}")
-    print(f"URL: {publication_result['publication_url']}")
+    print(f"Platform: {instagram_publication_result['platform']}")
+    print(
+        "Publication ID: "
+        f"{instagram_publication_result['publication_id']}"
+    )
+    print(f"URL: {instagram_publication_result['publication_url']}")
+    print("\nX Published")
+    print("===========")
+    print(f"Platform: {x_publication_result['platform']}")
+    print(f"Publication ID: {x_publication_result['publication_id']}")
+    print(f"URL: {x_publication_result['publication_url']}")

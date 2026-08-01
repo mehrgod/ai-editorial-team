@@ -62,7 +62,7 @@ class RecordingImageStorage:
         }
 
 
-class RecordingSocialPublisher:
+class RecordingInstagramPublisher:
     def __init__(self) -> None:
         self.publications = []
 
@@ -72,6 +72,19 @@ class RecordingSocialPublisher:
             "platform": "Instagram",
             "publication_id": "ig-media-123",
             "publication_url": "https://instagram.com/p/ig-media-123",
+        }
+
+
+class RecordingXPublisher:
+    def __init__(self) -> None:
+        self.publications = []
+
+    def publish(self, publication):
+        self.publications.append(publication)
+        return {
+            "platform": "X",
+            "publication_id": "x-post-123",
+            "publication_url": "https://x.com/i/web/status/x-post-123",
         }
 
 
@@ -85,7 +98,11 @@ class EditorialImageGenerationTests(unittest.TestCase):
         }
 
     def _build_workflow(
-        self, image_generator, image_storage=None, social_publisher=None
+        self,
+        image_generator,
+        image_storage=None,
+        instagram_publisher=None,
+        x_publisher=None,
     ):
         return EditorialWorkflow(
             finance_research_agent=FakeResearchAgent(self.story),
@@ -97,7 +114,8 @@ class EditorialImageGenerationTests(unittest.TestCase):
             image_prompt_agent=FakeImagePromptAgent(),
             image_generator=image_generator,
             image_storage=image_storage or RecordingImageStorage(),
-            social_publisher=social_publisher or RecordingSocialPublisher(),
+            instagram_publisher=instagram_publisher or RecordingInstagramPublisher(),
+            x_publisher=x_publisher or RecordingXPublisher(),
         )
 
     def test_image_generator_receives_prompt_once_and_final_package_contains_path(self):
@@ -128,16 +146,16 @@ class EditorialImageGenerationTests(unittest.TestCase):
 
     def test_s3_presigned_url_is_passed_to_instagram_publisher(self):
         image_generator = RecordingImageGenerator()
-        social_publisher = RecordingSocialPublisher()
+        instagram_publisher = RecordingInstagramPublisher()
         workflow = self._build_workflow(
             image_generator,
-            social_publisher=social_publisher,
+            instagram_publisher=instagram_publisher,
         )
 
         result = workflow.run()
 
         self.assertEqual(
-            social_publisher.publications,
+            instagram_publisher.publications,
             [
                 {
                     "caption": "Instagram for Markets climb on cooling inflation",
@@ -146,8 +164,27 @@ class EditorialImageGenerationTests(unittest.TestCase):
             ],
         )
         self.assertEqual(
-            result["publication_result"]["publication_id"],
+            result["instagram_publication_result"]["publication_id"],
             "ig-media-123",
+        )
+
+    def test_generated_x_post_is_passed_to_x_publisher(self):
+        image_generator = RecordingImageGenerator()
+        x_publisher = RecordingXPublisher()
+        workflow = self._build_workflow(
+            image_generator,
+            x_publisher=x_publisher,
+        )
+
+        result = workflow.run()
+
+        self.assertEqual(
+            x_publisher.publications,
+            [{"text": "X for Markets climb on cooling inflation"}],
+        )
+        self.assertEqual(
+            result["x_publication_result"]["publication_id"],
+            "x-post-123",
         )
 
     def test_image_file_writing_logic_can_be_tested_without_real_api(self):
