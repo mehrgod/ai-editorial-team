@@ -50,6 +50,24 @@ class RecordingImageGenerator:
         return {"file_path": "/tmp/editorial.png"}
 
 
+class RecordingSocialPublisher:
+    def __init__(self) -> None:
+        self.calls = []
+
+    def publish(self, publication):
+        self.calls.append(publication)
+        return {
+            "platform": "Instagram",
+            "publication_id": "ig-media-123",
+            "publication_url": "https://instagram.com/p/ig-media-123",
+        }
+
+
+class RecordingImageUrlProvider:
+    def provide_url(self, generated_image):
+        return {"url": f"https://example.com/{Path(generated_image['file_path']).name}"}
+
+
 class EditorialImageGenerationTests(unittest.TestCase):
     def setUp(self) -> None:
         self.story = {
@@ -69,6 +87,8 @@ class EditorialImageGenerationTests(unittest.TestCase):
             x_content_agent=FakeXAgent(),
             image_prompt_agent=FakeImagePromptAgent(),
             image_generator=image_generator,
+            image_url_provider=RecordingImageUrlProvider(),
+            social_publisher=RecordingSocialPublisher(),
         )
 
     def test_image_generator_receives_prompt_once_and_final_package_contains_path(self):

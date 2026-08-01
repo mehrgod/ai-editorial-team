@@ -11,6 +11,8 @@ from ai_editorial_team.domain.models import (
     GeneratedImage,
     ImagePrompt,
     InstagramContent,
+    PublicationResult,
+    PublicImageUrl,
     XContent,
     Story,
 )
@@ -18,8 +20,10 @@ from ai_editorial_team.domain.ports import (
     ChiefEditor,
     ImageGenerator,
     ImagePromptAgent,
+    ImageUrlProvider,
     InstagramContentAgent,
     ResearchAgent,
+    SocialPublisher,
     XContentAgent,
 )
 
@@ -32,6 +36,8 @@ INSTAGRAM_NODE = "Instagram Content Agent"
 X_NODE = "X Content Agent"
 IMAGE_PROMPT_NODE = "Image Prompt Agent"
 IMAGE_GENERATOR_NODE = "Image Generator"
+IMAGE_URL_PROVIDER_NODE = "Image URL Provider"
+INSTAGRAM_PUBLISHER_NODE = "Instagram Publisher"
 
 
 class ResearchNodeResult(TypedDict):
@@ -48,6 +54,8 @@ class EditorialGraphState(TypedDict, total=False):
     x_content: XContent
     image_prompt: ImagePrompt
     generated_image: GeneratedImage
+    public_image_url: PublicImageUrl
+    publication_result: PublicationResult
 
 
 @dataclass(frozen=True)
@@ -62,6 +70,8 @@ class EditorialWorkflow:
     x_content_agent: XContentAgent
     image_prompt_agent: ImagePromptAgent
     image_generator: ImageGenerator
+    image_url_provider: ImageUrlProvider
+    social_publisher: SocialPublisher
 
     def run(self) -> EditorialPackage:
         app = self._build_graph()
@@ -73,6 +83,8 @@ class EditorialWorkflow:
             "x_content": result["x_content"],
             "image_prompt": result["image_prompt"],
             "generated_image": result["generated_image"],
+            "public_image_url": result["public_image_url"],
+            "publication_result": result["publication_result"],
         }
 
     def _build_graph(self):
@@ -90,6 +102,8 @@ class EditorialWorkflow:
         graph.add_node(X_NODE, self._x_content_node)
         graph.add_node(IMAGE_PROMPT_NODE, self._image_prompt_node)
         graph.add_node(IMAGE_GENERATOR_NODE, self._image_generator_node)
+        graph.add_node(IMAGE_URL_PROVIDER_NODE, self._image_url_provider_node)
+        graph.add_node(INSTAGRAM_PUBLISHER_NODE, self._instagram_publisher_node)
 
         graph.add_edge(START, FINANCE_NODE)
         graph.add_edge(START, AI_NODE)
@@ -102,7 +116,9 @@ class EditorialWorkflow:
         graph.add_edge(INSTAGRAM_NODE, X_NODE)
         graph.add_edge(X_NODE, IMAGE_PROMPT_NODE)
         graph.add_edge(IMAGE_PROMPT_NODE, IMAGE_GENERATOR_NODE)
-        graph.add_edge(IMAGE_GENERATOR_NODE, END)
+        graph.add_edge(IMAGE_GENERATOR_NODE, IMAGE_URL_PROVIDER_NODE)
+        graph.add_edge(IMAGE_URL_PROVIDER_NODE, INSTAGRAM_PUBLISHER_NODE)
+        graph.add_edge(INSTAGRAM_PUBLISHER_NODE, END)
 
         return graph.compile()
 
@@ -149,5 +165,26 @@ class EditorialWorkflow:
         return {
             "generated_image": self.image_generator.generate(
                 state["image_prompt"]["image_prompt"]
+            )
+        }
+
+    def _image_url_provider_node(
+        self, state: EditorialGraphState
+    ) -> dict:
+        return {
+            "public_image_url": self.image_url_provider.provide_url(
+                state["generated_image"]
+            )
+        }
+
+    def _instagram_publisher_node(
+        self, state: EditorialGraphState
+    ) -> dict:
+        return {
+            "publication_result": self.social_publisher.publish(
+                {
+                    "caption": state["instagram_content"]["caption"],
+                    "image_url": state["public_image_url"]["url"],
+                }
             )
         }

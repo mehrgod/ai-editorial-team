@@ -1,10 +1,13 @@
-from typing import List, Protocol
+from typing import List, Protocol, runtime_checkable
 
 from ai_editorial_team.domain.models import (
     EditorialDecision,
     GeneratedImage,
     ImagePrompt,
     InstagramContent,
+    PublicationRequest,
+    PublicationResult,
+    PublicImageUrl,
     XContent,
     Story,
 )
@@ -49,4 +52,19 @@ class ImageGenerator(Protocol):
     """Interface for services that generate and store final images."""
 
     def generate(self, image_prompt: str) -> GeneratedImage:
+        ...
+
+
+class ImageUrlProvider(Protocol):
+    """Interface for making a generated local image publicly reachable."""
+
+    def provide_url(self, generated_image: GeneratedImage) -> PublicImageUrl:
+        ...
+
+
+@runtime_checkable
+class SocialPublisher(Protocol):
+    """Interface for platform publishers."""
+
+    def publish(self, publication: PublicationRequest) -> PublicationResult:
         ...

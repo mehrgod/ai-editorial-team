@@ -28,6 +28,16 @@ def main() -> None:
     from ai_editorial_team.infrastructure.image_generation.openai_image_generator import (
         OpenAIImageGenerator,
     )
+    from ai_editorial_team.infrastructure.image_storage.mock_image_url_provider import (
+        ImageUrlProviderError,
+        MockImageUrlProvider,
+    )
+    from ai_editorial_team.infrastructure.publishing.config import (
+        PublishingInfrastructureError,
+    )
+    from ai_editorial_team.infrastructure.publishing.instagram_publisher import (
+        create_instagram_publisher_from_env,
+    )
     from ai_editorial_team.infrastructure.research.rss_agents import (
         RssFeedError,
         create_ai_research_agent,
@@ -71,9 +81,16 @@ def main() -> None:
                 client=openai_bundle.client,
                 model=openai_bundle.image_model,
             ),
+            image_url_provider=MockImageUrlProvider(),
+            social_publisher=create_instagram_publisher_from_env(),
         )
         run_cli(workflow)
-    except (RssFeedError, OpenAIInfrastructureError) as exc:
+    except (
+        RssFeedError,
+        ImageUrlProviderError,
+        OpenAIInfrastructureError,
+        PublishingInfrastructureError,
+    ) as exc:
         raise SystemExit(f"Error: {exc}")
 
 
