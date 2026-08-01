@@ -50,22 +50,29 @@ class RecordingImageGenerator:
         return {"file_path": "/tmp/editorial.png"}
 
 
+class RecordingImageStorage:
+    def __init__(self) -> None:
+        self.local_file_paths = []
+
+    def store(self, local_file_path: str):
+        self.local_file_paths.append(local_file_path)
+        return {
+            "object_key": "images/editorial.png",
+            "public_url": "https://example.com/presigned-editorial.png",
+        }
+
+
 class RecordingSocialPublisher:
     def __init__(self) -> None:
-        self.calls = []
+        self.publications = []
 
     def publish(self, publication):
-        self.calls.append(publication)
+        self.publications.append(publication)
         return {
             "platform": "Instagram",
             "publication_id": "ig-media-123",
             "publication_url": "https://instagram.com/p/ig-media-123",
         }
-
-
-class RecordingImageUrlProvider:
-    def provide_url(self, generated_image):
-        return {"url": f"https://example.com/{Path(generated_image['file_path']).name}"}
 
 
 class EditorialImageGenerationTests(unittest.TestCase):
@@ -77,7 +84,9 @@ class EditorialImageGenerationTests(unittest.TestCase):
             "reason": "A simple test reason.",
         }
 
-    def _build_workflow(self, image_generator):
+    def _build_workflow(
+        self, image_generator, image_storage=None, social_publisher=None
+    ):
         return EditorialWorkflow(
             finance_research_agent=FakeResearchAgent(self.story),
             ai_research_agent=FakeResearchAgent(self.story),
@@ -87,8 +96,8 @@ class EditorialImageGenerationTests(unittest.TestCase):
             x_content_agent=FakeXAgent(),
             image_prompt_agent=FakeImagePromptAgent(),
             image_generator=image_generator,
-            image_url_provider=RecordingImageUrlProvider(),
-            social_publisher=RecordingSocialPublisher(),
+            image_storage=image_storage or RecordingImageStorage(),
+            social_publisher=social_publisher or RecordingSocialPublisher(),
         )
 
     def test_image_generator_receives_prompt_once_and_final_package_contains_path(self):
@@ -102,6 +111,44 @@ class EditorialImageGenerationTests(unittest.TestCase):
             ["Image prompt for Markets climb on cooling inflation"],
         )
         self.assertEqual(result["generated_image"]["file_path"], "/tmp/editorial.png")
+
+    def test_local_file_path_is_passed_to_storage_and_final_package_contains_result(self):
+        image_generator = RecordingImageGenerator()
+        image_storage = RecordingImageStorage()
+        workflow = self._build_workflow(image_generator, image_storage)
+
+        result = workflow.run()
+
+        self.assertEqual(image_storage.local_file_paths, ["/tmp/editorial.png"])
+        self.assertEqual(result["stored_image"]["object_key"], "images/editorial.png")
+        self.assertEqual(
+            result["stored_image"]["public_url"],
+            "https://example.com/presigned-editorial.png",
+        )
+
+    def test_s3_presigned_url_is_passed_to_instagram_publisher(self):
+        image_generator = RecordingImageGenerator()
+        social_publisher = RecordingSocialPublisher()
+        workflow = self._build_workflow(
+            image_generator,
+            social_publisher=social_publisher,
+        )
+
+        result = workflow.run()
+
+        self.assertEqual(
+            social_publisher.publications,
+            [
+                {
+                    "caption": "Instagram for Markets climb on cooling inflation",
+                    "image_url": "https://example.com/presigned-editorial.png",
+                }
+            ],
+        )
+        self.assertEqual(
+            result["publication_result"]["publication_id"],
+            "ig-media-123",
+        )
 
     def test_image_file_writing_logic_can_be_tested_without_real_api(self):
         with tempfile.TemporaryDirectory() as temp_dir:

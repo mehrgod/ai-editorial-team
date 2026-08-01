@@ -12,7 +12,7 @@ from ai_editorial_team.domain.models import (
     ImagePrompt,
     InstagramContent,
     PublicationResult,
-    PublicImageUrl,
+    StoredImage,
     XContent,
     Story,
 )
@@ -20,7 +20,7 @@ from ai_editorial_team.domain.ports import (
     ChiefEditor,
     ImageGenerator,
     ImagePromptAgent,
-    ImageUrlProvider,
+    ImageStorage,
     InstagramContentAgent,
     ResearchAgent,
     SocialPublisher,
@@ -36,7 +36,7 @@ INSTAGRAM_NODE = "Instagram Content Agent"
 X_NODE = "X Content Agent"
 IMAGE_PROMPT_NODE = "Image Prompt Agent"
 IMAGE_GENERATOR_NODE = "Image Generator"
-IMAGE_URL_PROVIDER_NODE = "Image URL Provider"
+S3_IMAGE_STORAGE_NODE = "S3 Image Storage"
 INSTAGRAM_PUBLISHER_NODE = "Instagram Publisher"
 
 
@@ -54,7 +54,7 @@ class EditorialGraphState(TypedDict, total=False):
     x_content: XContent
     image_prompt: ImagePrompt
     generated_image: GeneratedImage
-    public_image_url: PublicImageUrl
+    stored_image: StoredImage
     publication_result: PublicationResult
 
 
@@ -70,7 +70,7 @@ class EditorialWorkflow:
     x_content_agent: XContentAgent
     image_prompt_agent: ImagePromptAgent
     image_generator: ImageGenerator
-    image_url_provider: ImageUrlProvider
+    image_storage: ImageStorage
     social_publisher: SocialPublisher
 
     def run(self) -> EditorialPackage:
@@ -83,7 +83,7 @@ class EditorialWorkflow:
             "x_content": result["x_content"],
             "image_prompt": result["image_prompt"],
             "generated_image": result["generated_image"],
-            "public_image_url": result["public_image_url"],
+            "stored_image": result["stored_image"],
             "publication_result": result["publication_result"],
         }
 
@@ -102,7 +102,7 @@ class EditorialWorkflow:
         graph.add_node(X_NODE, self._x_content_node)
         graph.add_node(IMAGE_PROMPT_NODE, self._image_prompt_node)
         graph.add_node(IMAGE_GENERATOR_NODE, self._image_generator_node)
-        graph.add_node(IMAGE_URL_PROVIDER_NODE, self._image_url_provider_node)
+        graph.add_node(S3_IMAGE_STORAGE_NODE, self._s3_image_storage_node)
         graph.add_node(INSTAGRAM_PUBLISHER_NODE, self._instagram_publisher_node)
 
         graph.add_edge(START, FINANCE_NODE)
@@ -116,8 +116,8 @@ class EditorialWorkflow:
         graph.add_edge(INSTAGRAM_NODE, X_NODE)
         graph.add_edge(X_NODE, IMAGE_PROMPT_NODE)
         graph.add_edge(IMAGE_PROMPT_NODE, IMAGE_GENERATOR_NODE)
-        graph.add_edge(IMAGE_GENERATOR_NODE, IMAGE_URL_PROVIDER_NODE)
-        graph.add_edge(IMAGE_URL_PROVIDER_NODE, INSTAGRAM_PUBLISHER_NODE)
+        graph.add_edge(IMAGE_GENERATOR_NODE, S3_IMAGE_STORAGE_NODE)
+        graph.add_edge(S3_IMAGE_STORAGE_NODE, INSTAGRAM_PUBLISHER_NODE)
         graph.add_edge(INSTAGRAM_PUBLISHER_NODE, END)
 
         return graph.compile()
@@ -168,23 +168,19 @@ class EditorialWorkflow:
             )
         }
 
-    def _image_url_provider_node(
-        self, state: EditorialGraphState
-    ) -> dict:
+    def _s3_image_storage_node(self, state: EditorialGraphState) -> dict:
         return {
-            "public_image_url": self.image_url_provider.provide_url(
-                state["generated_image"]
+            "stored_image": self.image_storage.store(
+                state["generated_image"]["file_path"]
             )
         }
 
-    def _instagram_publisher_node(
-        self, state: EditorialGraphState
-    ) -> dict:
+    def _instagram_publisher_node(self, state: EditorialGraphState) -> dict:
         return {
             "publication_result": self.social_publisher.publish(
                 {
                     "caption": state["instagram_content"]["caption"],
-                    "image_url": state["public_image_url"]["url"],
+                    "image_url": state["stored_image"]["public_url"],
                 }
             )
         }

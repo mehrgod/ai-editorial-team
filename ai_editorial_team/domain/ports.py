@@ -7,7 +7,7 @@ from ai_editorial_team.domain.models import (
     InstagramContent,
     PublicationRequest,
     PublicationResult,
-    PublicImageUrl,
+    StoredImage,
     XContent,
     Story,
 )
@@ -55,16 +55,16 @@ class ImageGenerator(Protocol):
         ...
 
 
-class ImageUrlProvider(Protocol):
-    """Interface for making a generated local image publicly reachable."""
+class ImageStorage(Protocol):
+    """Interface for storing a generated local image externally."""
 
-    def provide_url(self, generated_image: GeneratedImage) -> PublicImageUrl:
+    def store(self, local_file_path: str) -> StoredImage:
         ...
 
 
 @runtime_checkable
 class SocialPublisher(Protocol):
-    """Interface for platform publishers."""
+    """Interface for publishing prepared social content."""
 
     def publish(self, publication: PublicationRequest) -> PublicationResult:
         ...

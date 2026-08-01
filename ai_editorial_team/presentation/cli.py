@@ -10,6 +10,7 @@ def run_cli(workflow: EditorialWorkflow) -> None:
     x_content = result["x_content"]
     image_prompt = result["image_prompt"]
     generated_image = result["generated_image"]
+    stored_image = result["stored_image"]
     publication_result = result["publication_result"]
 
     print("\nSelected Story")
@@ -31,11 +32,12 @@ def run_cli(workflow: EditorialWorkflow) -> None:
     print("\nGenerated Image")
     print("===============")
     print(f"Path: {generated_image['file_path']}")
+    print("\nStored Image")
+    print("============")
+    print(f"S3 Key: {stored_image['object_key']}")
+    print(f"URL: {stored_image['public_url']}")
     print("\nInstagram Published")
     print("===================")
-    print("Platform: Instagram")
+    print(f"Platform: {publication_result['platform']}")
     print(f"Publication ID: {publication_result['publication_id']}")
-    print(
-        "URL: "
-        f"{publication_result.get('publication_url', 'N/A')}"
-    )
+    print(f"URL: {publication_result['publication_url']}")

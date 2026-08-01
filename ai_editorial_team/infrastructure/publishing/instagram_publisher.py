@@ -1,31 +1,30 @@
 from dataclasses import dataclass
 import json
+import os
 from typing import Any, Protocol
 from urllib import error as urllib_error
 from urllib import parse as urllib_parse
 from urllib import request as urllib_request
+
+from dotenv import load_dotenv
 
 from ai_editorial_team.domain.models import (
     PublicationRequest,
     PublicationResult,
 )
 from ai_editorial_team.domain.ports import SocialPublisher
-from ai_editorial_team.infrastructure.publishing.config import (
-    InstagramPublishingConfig,
-    PublishingConfigurationError,
-    PublishingInfrastructureError,
-)
 
 
-GRAPH_API_BASE_URL = "https://graph.facebook.com"
+DEFAULT_GRAPH_API_VERSION = "v24.0"
+GRAPH_API_BASE_URL = "https://graph.instagram.com"
 
 
-class InstagramPublishingError(PublishingInfrastructureError):
+class InstagramPublishingError(RuntimeError):
     """Raised when Instagram publishing fails."""
 
 
-class InstagramPublisherConfigurationError(InstagramPublishingError):
-    """Raised when Instagram publishing configuration is missing."""
+class InstagramPublishingConfigurationError(InstagramPublishingError):
+    """Raised when required Instagram publishing configuration is missing."""
 
 
 class InstagramAuthenticationError(InstagramPublishingError):
@@ -44,8 +43,43 @@ class InstagramPublicationLookupError(InstagramPublishingError):
     """Raised when the published media permalink cannot be resolved."""
 
 
-class InstagramPublicationResponseError(InstagramPublishingError):
-    """Raised when the API response is incomplete."""
+@dataclass(frozen=True)
+class InstagramPublishingConfig:
+    instagram_professional_account_id: str
+    meta_access_token: str
+    graph_api_version: str = DEFAULT_GRAPH_API_VERSION
+
+    @classmethod
+    def from_env(cls) -> "InstagramPublishingConfig":
+        load_dotenv()
+
+        instagram_professional_account_id = os.environ.get(
+            "INSTAGRAM_PROFESSIONAL_ACCOUNT_ID"
+        )
+        meta_access_token = os.environ.get("META_ACCESS_TOKEN")
+        graph_api_version = (
+            os.environ.get("GRAPH_API_VERSION") or DEFAULT_GRAPH_API_VERSION
+        )
+
+        missing = [
+            name
+            for name, value in [
+                ("INSTAGRAM_PROFESSIONAL_ACCOUNT_ID", instagram_professional_account_id),
+                ("META_ACCESS_TOKEN", meta_access_token),
+            ]
+            if not value
+        ]
+        if missing:
+            raise InstagramPublishingConfigurationError(
+                "Missing required Instagram publishing configuration: "
+                + ", ".join(missing)
+            )
+
+        return cls(
+            instagram_professional_account_id=instagram_professional_account_id,
+            meta_access_token=meta_access_token,
+            graph_api_version=graph_api_version,
+        )
 
 
 class InstagramGraphApi(Protocol):
@@ -64,36 +98,34 @@ class MetaInstagramGraphApi:
     config: InstagramPublishingConfig
 
     def create_media_container(self, caption: str, image_url: str) -> str:
-        payload = {
-            "image_url": image_url,
-            "caption": caption,
-            "access_token": self.config.meta_access_token,
-        }
         data = self._post_json(
             self._graph_url(f"/{self.config.instagram_professional_account_id}/media"),
-            payload,
+            {
+                "image_url": image_url,
+                "caption": caption,
+                "access_token": self.config.meta_access_token,
+            },
         )
         container_id = data.get("id")
         if not container_id:
-            raise InstagramPublicationResponseError(
+            raise InstagramMediaContainerError(
                 "Instagram media container response did not include an id."
             )
         return str(container_id)
 
     def publish_media_container(self, container_id: str) -> str:
-        payload = {
-            "creation_id": container_id,
-            "access_token": self.config.meta_access_token,
-        }
         data = self._post_json(
             self._graph_url(
                 f"/{self.config.instagram_professional_account_id}/media_publish"
             ),
-            payload,
+            {
+                "creation_id": container_id,
+                "access_token": self.config.meta_access_token,
+            },
         )
         publication_id = data.get("id")
         if not publication_id:
-            raise InstagramPublicationResponseError(
+            raise InstagramMediaPublishError(
                 "Instagram publish response did not include an id."
             )
         return str(publication_id)
@@ -108,7 +140,7 @@ class MetaInstagramGraphApi:
         )
         publication_url = data.get("permalink")
         if not publication_url:
-            raise InstagramPublicationResponseError(
+            raise InstagramPublicationLookupError(
                 "Instagram publication lookup did not include a permalink."
             )
         return str(publication_url)
@@ -174,9 +206,8 @@ class MetaInstagramGraphApi:
 
 @dataclass(frozen=True)
 class InstagramPublisher(SocialPublisher):
-    """Publishes an Instagram caption and image via the Graph API."""
+    """Publishes one Instagram image post using the Graph API."""
 
-    config: InstagramPublishingConfig
     api: InstagramGraphApi
 
     def publish(self, publication: PublicationRequest) -> PublicationResult:
@@ -191,10 +222,6 @@ class InstagramPublisher(SocialPublisher):
             raise InstagramMediaContainerError(
                 f"Instagram media container creation failed: {exc}"
             ) from exc
-        except Exception as exc:  # pragma: no cover - defensive guard
-            raise InstagramMediaContainerError(
-                f"Instagram media container creation failed: {exc}"
-            ) from exc
 
         try:
             publication_id = self.api.publish_media_container(container_id)
@@ -204,20 +231,12 @@ class InstagramPublisher(SocialPublisher):
             raise InstagramMediaPublishError(
                 f"Instagram media publishing failed: {exc}"
             ) from exc
-        except Exception as exc:  # pragma: no cover - defensive guard
-            raise InstagramMediaPublishError(
-                f"Instagram media publishing failed: {exc}"
-            ) from exc
 
         try:
             publication_url = self.api.fetch_publication_url(publication_id)
         except InstagramAuthenticationError:
             raise
         except InstagramPublishingError as exc:
-            raise InstagramPublicationLookupError(
-                f"Instagram publication URL lookup failed: {exc}"
-            ) from exc
-        except Exception as exc:  # pragma: no cover - defensive guard
             raise InstagramPublicationLookupError(
                 f"Instagram publication URL lookup failed: {exc}"
             ) from exc
@@ -251,12 +270,7 @@ def _extract_meta_error_message(body: str) -> str | None:
 
 
 def create_instagram_publisher_from_env() -> InstagramPublisher:
-    try:
-        config = InstagramPublishingConfig.from_env()
-    except PublishingConfigurationError as exc:
-        raise InstagramPublisherConfigurationError(str(exc)) from exc
-
+    config = InstagramPublishingConfig.from_env()
     return InstagramPublisher(
-        config=config,
         api=MetaInstagramGraphApi(config),
     )
