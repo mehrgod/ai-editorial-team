@@ -45,10 +45,13 @@ class XPublishingConfig:
     def from_env(cls) -> "XPublishingConfig":
         load_dotenv()
 
-        user_access_token = os.environ.get("X_USER_ACCESS_TOKEN")
+        user_access_token = (
+            os.environ.get("X_ACCESS_TOKEN")
+            or os.environ.get("X_USER_ACCESS_TOKEN")
+        )
         if not user_access_token:
             raise XPublishingConfigurationError(
-                "Missing required X publishing configuration: X_USER_ACCESS_TOKEN"
+                "Missing required X publishing configuration: X_ACCESS_TOKEN"
             )
 
         return cls(user_access_token=user_access_token)

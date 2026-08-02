@@ -1,12 +1,12 @@
 from typing import List, Protocol, runtime_checkable
 
 from ai_editorial_team.domain.models import (
-    EditorialDecision,
     GeneratedImage,
     ImagePrompt,
     InstagramContent,
     PublicationRequest,
     PublicationResult,
+    RankedStory,
     StoredImage,
     XContent,
     Story,
@@ -21,9 +21,9 @@ class ResearchAgent(Protocol):
 
 
 class ChiefEditor(Protocol):
-    """Interface for the agent that selects the final story."""
+    """Interface for the agent that ranks candidate stories."""
 
-    def select_story(self, stories: List[Story]) -> EditorialDecision:
+    def rank_stories(self, stories: List[Story]) -> List[RankedStory]:
         ...
 
 

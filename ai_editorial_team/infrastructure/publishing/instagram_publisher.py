@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 import json
 import os
+import time
 from typing import Any, Protocol
 from urllib import error as urllib_error
 from urllib import parse as urllib_parse
@@ -17,6 +18,10 @@ from ai_editorial_team.domain.ports import SocialPublisher
 
 DEFAULT_GRAPH_API_VERSION = "v24.0"
 GRAPH_API_BASE_URL = "https://graph.instagram.com"
+CONTAINER_READY_STATUS = "FINISHED"
+CONTAINER_TERMINAL_FAILURE_STATUSES = {"ERROR", "EXPIRED"}
+CONTAINER_STATUS_ATTEMPTS = 6
+CONTAINER_STATUS_DELAY_SECONDS = 5
 
 
 class InstagramPublishingError(RuntimeError):
@@ -86,6 +91,9 @@ class InstagramGraphApi(Protocol):
     def create_media_container(self, caption: str, image_url: str) -> str:
         ...
 
+    def fetch_container_status(self, container_id: str) -> str:
+        ...
+
     def publish_media_container(self, container_id: str) -> str:
         ...
 
@@ -129,6 +137,22 @@ class MetaInstagramGraphApi:
                 "Instagram publish response did not include an id."
             )
         return str(publication_id)
+
+    def fetch_container_status(self, container_id: str) -> str:
+        data = self._get_json(
+            self._graph_url(f"/{container_id}"),
+            {
+                "fields": "status_code,status",
+                "access_token": self.config.meta_access_token,
+            },
+        )
+        status_code = data.get("status_code")
+        if not status_code:
+            raise InstagramMediaContainerError(
+                "Instagram media container status response did not include "
+                "status_code."
+            )
+        return str(status_code)
 
     def fetch_publication_url(self, publication_id: str) -> str:
         data = self._get_json(
@@ -209,6 +233,8 @@ class InstagramPublisher(SocialPublisher):
     """Publishes one Instagram image post using the Graph API."""
 
     api: InstagramGraphApi
+    status_attempts: int = CONTAINER_STATUS_ATTEMPTS
+    status_delay_seconds: int = CONTAINER_STATUS_DELAY_SECONDS
 
     def publish(self, publication: PublicationRequest) -> PublicationResult:
         try:
@@ -222,6 +248,8 @@ class InstagramPublisher(SocialPublisher):
             raise InstagramMediaContainerError(
                 f"Instagram media container creation failed: {exc}"
             ) from exc
+
+        self._wait_until_container_ready(container_id)
 
         try:
             publication_id = self.api.publish_media_container(container_id)
@@ -246,6 +274,34 @@ class InstagramPublisher(SocialPublisher):
             "publication_id": publication_id,
             "publication_url": publication_url,
         }
+
+    def _wait_until_container_ready(self, container_id: str) -> None:
+        last_status = ""
+        for attempt in range(self.status_attempts):
+            try:
+                last_status = self.api.fetch_container_status(container_id)
+            except InstagramAuthenticationError:
+                raise
+            except InstagramPublishingError as exc:
+                raise InstagramMediaContainerError(
+                    f"Instagram media container status check failed: {exc}"
+                ) from exc
+
+            if last_status == CONTAINER_READY_STATUS:
+                return
+            if last_status in CONTAINER_TERMINAL_FAILURE_STATUSES:
+                raise InstagramMediaContainerError(
+                    "Instagram media container failed while processing: "
+                    f"{last_status}"
+                )
+
+            if attempt < self.status_attempts - 1:
+                time.sleep(self.status_delay_seconds)
+
+        raise InstagramMediaContainerError(
+            "Instagram media container was not ready to publish after "
+            f"{self.status_attempts} checks. Last status: {last_status}."
+        )
 
 
 def _extract_meta_error_message(body: str) -> str | None:

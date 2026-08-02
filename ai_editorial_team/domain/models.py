@@ -10,9 +10,14 @@ class Story(TypedDict):
     reason: str
 
 
-class EditorialDecision(TypedDict):
-    selected_story: Story
+class RankedStory(TypedDict):
+    rank: int
+    story: Story
     editorial_reason: str
+
+
+class EditorialPackage(TypedDict):
+    ranked_stories: List[RankedStory]
 
 
 class InstagramContent(TypedDict):
@@ -48,24 +53,6 @@ class PublicationResult(TypedDict):
     publication_url: str
 
 
-class EditorialPackage(EditorialDecision):
-    instagram_content: InstagramContent
-    x_content: XContent
-    image_prompt: ImagePrompt
-    generated_image: GeneratedImage
-    stored_image: StoredImage
-    instagram_publication_result: PublicationResult
-    x_publication_result: PublicationResult
-
-
 class EditorialState(TypedDict, total=False):
     stories: List[Story]
-    selected_story: Story
-    editorial_reason: str
-    instagram_content: InstagramContent
-    x_content: XContent
-    image_prompt: ImagePrompt
-    generated_image: GeneratedImage
-    stored_image: StoredImage
-    instagram_publication_result: PublicationResult
-    x_publication_result: PublicationResult
+    ranked_stories: List[RankedStory]

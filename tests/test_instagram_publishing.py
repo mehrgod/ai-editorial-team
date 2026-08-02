@@ -10,12 +10,17 @@ from ai_editorial_team.infrastructure.publishing.instagram_publisher import (
 class FakeInstagramGraphApi:
     def __init__(self) -> None:
         self.create_calls = []
+        self.status_calls = []
         self.publish_calls = []
         self.lookup_calls = []
 
     def create_media_container(self, caption: str, image_url: str) -> str:
         self.create_calls.append((caption, image_url))
         return "container-123"
+
+    def fetch_container_status(self, container_id: str) -> str:
+        self.status_calls.append(container_id)
+        return "FINISHED"
 
     def publish_media_container(self, container_id: str) -> str:
         self.publish_calls.append(container_id)
@@ -31,6 +36,9 @@ class ExplodingInstagramGraphApi:
         raise InstagramMediaContainerError("container failed")
 
     def publish_media_container(self, container_id: str) -> str:
+        raise AssertionError("should not be called")
+
+    def fetch_container_status(self, container_id: str) -> str:
         raise AssertionError("should not be called")
 
     def fetch_publication_url(self, publication_id: str) -> str:
@@ -63,6 +71,7 @@ class InstagramPublishingTests(unittest.TestCase):
                 )
             ],
         )
+        self.assertEqual(api.status_calls, ["container-123"])
         self.assertEqual(api.publish_calls, ["container-123"])
         self.assertEqual(api.lookup_calls, ["publication-456"])
         self.assertEqual(

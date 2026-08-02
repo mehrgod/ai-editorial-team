@@ -16,30 +16,6 @@ def main() -> None:
         )
 
     from ai_editorial_team.application.workflow import EditorialWorkflow
-    from ai_editorial_team.infrastructure.content.openai_instagram_content_agent import (
-        InstagramContentAgent,
-    )
-    from ai_editorial_team.infrastructure.content.openai_image_prompt_agent import (
-        ImagePromptAgent,
-    )
-    from ai_editorial_team.infrastructure.content.openai_x_content_agent import (
-        XContentAgent,
-    )
-    from ai_editorial_team.infrastructure.image_generation.openai_image_generator import (
-        OpenAIImageGenerator,
-    )
-    from ai_editorial_team.infrastructure.image_storage.s3_image_storage import (
-        S3ImageStorageError,
-        create_s3_image_storage_from_env,
-    )
-    from ai_editorial_team.infrastructure.publishing.instagram_publisher import (
-        InstagramPublishingError,
-        create_instagram_publisher_from_env,
-    )
-    from ai_editorial_team.infrastructure.publishing.x_publisher import (
-        XPublishingError,
-        create_x_publisher_from_env,
-    )
     from ai_editorial_team.infrastructure.research.rss_agents import (
         RssFeedError,
         create_ai_research_agent,
@@ -67,33 +43,11 @@ def main() -> None:
                 client=openai_bundle.client,
                 model=openai_bundle.model,
             ),
-            instagram_content_agent=InstagramContentAgent(
-                client=openai_bundle.client,
-                model=openai_bundle.model,
-            ),
-            x_content_agent=XContentAgent(
-                client=openai_bundle.client,
-                model=openai_bundle.model,
-            ),
-            image_prompt_agent=ImagePromptAgent(
-                client=openai_bundle.client,
-                model=openai_bundle.model,
-            ),
-            image_generator=OpenAIImageGenerator(
-                client=openai_bundle.client,
-                model=openai_bundle.image_model,
-            ),
-            image_storage=create_s3_image_storage_from_env(),
-            instagram_publisher=create_instagram_publisher_from_env(),
-            x_publisher=create_x_publisher_from_env(),
         )
         run_cli(workflow)
     except (
         RssFeedError,
-        InstagramPublishingError,
         OpenAIInfrastructureError,
-        S3ImageStorageError,
-        XPublishingError,
     ) as exc:
         raise SystemExit(f"Error: {exc}")
 
