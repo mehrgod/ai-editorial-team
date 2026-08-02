@@ -17,3 +17,4 @@ def run_cli(workflow: EditorialWorkflow) -> None:
             "Instagram Caption: "
             f"{story_content['instagram_content']['caption']}"
         )
+        print(f"Image Prompt: {story_content['image_prompt']['image_prompt']}")

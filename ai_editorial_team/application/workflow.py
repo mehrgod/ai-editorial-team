@@ -13,6 +13,7 @@ from ai_editorial_team.domain.models import (
 )
 from ai_editorial_team.domain.ports import (
     ChiefEditor,
+    ImagePromptAgent,
     InstagramContentAgent,
     ResearchAgent,
 )
@@ -23,6 +24,7 @@ AI_NODE = "AI Research Agent"
 SPORTS_NODE = "Sports Research Agent"
 EDITOR_NODE = "Chief Editor Agent"
 INSTAGRAM_NODE = "Instagram Content Agent"
+IMAGE_PROMPT_NODE = "Image Prompt Agent"
 
 
 class ResearchNodeResult(TypedDict):
@@ -46,6 +48,7 @@ class EditorialWorkflow:
     sports_research_agent: ResearchAgent
     chief_editor: ChiefEditor
     instagram_content_agent: InstagramContentAgent
+    image_prompt_agent: ImagePromptAgent
 
     def run(self) -> EditorialPackage:
         app = self._build_graph()
@@ -66,6 +69,7 @@ class EditorialWorkflow:
         )
         graph.add_node(EDITOR_NODE, self._chief_editor_node)
         graph.add_node(INSTAGRAM_NODE, self._instagram_content_node)
+        graph.add_node(IMAGE_PROMPT_NODE, self._image_prompt_node)
 
         graph.add_edge(START, FINANCE_NODE)
         graph.add_edge(START, AI_NODE)
@@ -75,7 +79,8 @@ class EditorialWorkflow:
         graph.add_edge(AI_NODE, EDITOR_NODE)
         graph.add_edge(SPORTS_NODE, EDITOR_NODE)
         graph.add_edge(EDITOR_NODE, INSTAGRAM_NODE)
-        graph.add_edge(INSTAGRAM_NODE, END)
+        graph.add_edge(INSTAGRAM_NODE, IMAGE_PROMPT_NODE)
+        graph.add_edge(IMAGE_PROMPT_NODE, END)
 
         return graph.compile()
 
@@ -107,5 +112,23 @@ class EditorialWorkflow:
                     ),
                 }
                 for ranked_story in state["ranked_stories"]
+            ]
+        }
+
+    def _image_prompt_node(self, state: EditorialGraphState) -> dict:
+        return {
+            "instagram_story_contents": [
+                {
+                    "rank": story_content["rank"],
+                    "story": story_content["story"],
+                    "editorial_reason": story_content["editorial_reason"],
+                    "instagram_content": story_content["instagram_content"],
+                    "image_prompt": (
+                        self.image_prompt_agent.generate_image_prompt(
+                            story_content["story"]
+                        )
+                    ),
+                }
+                for story_content in state["instagram_story_contents"]
             ]
         }

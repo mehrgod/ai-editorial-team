@@ -46,6 +46,15 @@ class RecordingInstagramContentAgent:
         return {"caption": f"Caption for {story['headline']}"}
 
 
+class RecordingImagePromptAgent:
+    def __init__(self) -> None:
+        self.received_stories = []
+
+    def generate_image_prompt(self, story: Story):
+        self.received_stories.append(story)
+        return {"image_prompt": f"Image prompt for {story['headline']}"}
+
+
 class EditorialRankingWorkflowTests(unittest.TestCase):
     def setUp(self) -> None:
         self.finance_story = {
@@ -68,12 +77,14 @@ class EditorialRankingWorkflowTests(unittest.TestCase):
         }
         self.chief_editor = RecordingChiefEditor()
         self.instagram_content_agent = RecordingInstagramContentAgent()
+        self.image_prompt_agent = RecordingImagePromptAgent()
         self.workflow = EditorialWorkflow(
             finance_research_agent=FakeResearchAgent(self.finance_story),
             ai_research_agent=FakeResearchAgent(self.ai_story),
             sports_research_agent=FakeResearchAgent(self.sports_story),
             chief_editor=self.chief_editor,
             instagram_content_agent=self.instagram_content_agent,
+            image_prompt_agent=self.image_prompt_agent,
         )
 
     def test_all_three_stories_are_passed_to_chief_editor(self):
@@ -144,6 +155,45 @@ class EditorialRankingWorkflowTests(unittest.TestCase):
             {"Finance headline", "AI headline", "Sports headline"},
         )
 
+    def test_image_prompt_agent_is_called_once_for_each_ranked_story_in_order(self):
+        self.workflow.run()
+
+        self.assertEqual(len(self.image_prompt_agent.received_stories), 3)
+        self.assertEqual(
+            [
+                story["headline"]
+                for story in self.image_prompt_agent.received_stories
+            ],
+            ["Sports headline", "AI headline", "Finance headline"],
+        )
+
+    def test_every_ranked_story_has_image_prompt_with_no_duplicates_or_drops(self):
+        result = self.workflow.run()
+        story_contents = result["instagram_story_contents"]
+
+        self.assertEqual(
+            [story_content["rank"] for story_content in story_contents],
+            [1, 2, 3],
+        )
+        self.assertEqual(
+            [
+                story_content["image_prompt"]["image_prompt"]
+                for story_content in story_contents
+            ],
+            [
+                "Image prompt for Sports headline",
+                "Image prompt for AI headline",
+                "Image prompt for Finance headline",
+            ],
+        )
+        self.assertEqual(
+            {
+                story_content["story"]["headline"]
+                for story_content in story_contents
+            },
+            {"Finance headline", "AI headline", "Sports headline"},
+        )
+
     def test_cli_shows_ranked_order(self):
         output = io.StringIO()
 
@@ -156,9 +206,12 @@ class EditorialRankingWorkflowTests(unittest.TestCase):
         self.assertIn("Headline: Sports headline", rendered_output)
         self.assertIn("Editorial Reason: Reason 1", rendered_output)
         self.assertIn("Instagram Caption: Caption for Sports headline", rendered_output)
+        self.assertIn("Image Prompt: Image prompt for Sports headline", rendered_output)
         self.assertIn("Rank 2", rendered_output)
         self.assertIn("Domain: Artificial Intelligence", rendered_output)
         self.assertIn("Instagram Caption: Caption for AI headline", rendered_output)
+        self.assertIn("Image Prompt: Image prompt for AI headline", rendered_output)
         self.assertIn("Rank 3", rendered_output)
         self.assertIn("Domain: Finance", rendered_output)
         self.assertIn("Instagram Caption: Caption for Finance headline", rendered_output)
+        self.assertIn("Image Prompt: Image prompt for Finance headline", rendered_output)

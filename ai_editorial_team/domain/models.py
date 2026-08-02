@@ -26,6 +26,7 @@ class InstagramContent(TypedDict):
 
 class InstagramStoryContent(RankedStory):
     instagram_content: InstagramContent
+    image_prompt: "ImagePrompt"
 
 
 class XContent(TypedDict):
