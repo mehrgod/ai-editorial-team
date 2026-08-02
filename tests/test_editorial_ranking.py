@@ -55,6 +55,15 @@ class RecordingImagePromptAgent:
         return {"image_prompt": f"Image prompt for {story['headline']}"}
 
 
+class RecordingImageGenerator:
+    def __init__(self) -> None:
+        self.received_prompts = []
+
+    def generate(self, image_prompt: str):
+        self.received_prompts.append(image_prompt)
+        return {"file_path": f"output/images/generated_{len(self.received_prompts)}.png"}
+
+
 class EditorialRankingWorkflowTests(unittest.TestCase):
     def setUp(self) -> None:
         self.finance_story = {
@@ -78,6 +87,7 @@ class EditorialRankingWorkflowTests(unittest.TestCase):
         self.chief_editor = RecordingChiefEditor()
         self.instagram_content_agent = RecordingInstagramContentAgent()
         self.image_prompt_agent = RecordingImagePromptAgent()
+        self.image_generator = RecordingImageGenerator()
         self.workflow = EditorialWorkflow(
             finance_research_agent=FakeResearchAgent(self.finance_story),
             ai_research_agent=FakeResearchAgent(self.ai_story),
@@ -85,6 +95,7 @@ class EditorialRankingWorkflowTests(unittest.TestCase):
             chief_editor=self.chief_editor,
             instagram_content_agent=self.instagram_content_agent,
             image_prompt_agent=self.image_prompt_agent,
+            image_generator=self.image_generator,
         )
 
     def test_all_three_stories_are_passed_to_chief_editor(self):
@@ -194,6 +205,46 @@ class EditorialRankingWorkflowTests(unittest.TestCase):
             {"Finance headline", "AI headline", "Sports headline"},
         )
 
+    def test_image_generator_is_called_once_for_each_image_prompt_in_order(self):
+        self.workflow.run()
+
+        self.assertEqual(len(self.image_generator.received_prompts), 3)
+        self.assertEqual(
+            self.image_generator.received_prompts,
+            [
+                "Image prompt for Sports headline",
+                "Image prompt for AI headline",
+                "Image prompt for Finance headline",
+            ],
+        )
+
+    def test_every_ranked_story_has_generated_image_with_no_duplicates_or_drops(self):
+        result = self.workflow.run()
+        story_contents = result["instagram_story_contents"]
+
+        self.assertEqual(
+            [story_content["rank"] for story_content in story_contents],
+            [1, 2, 3],
+        )
+        self.assertEqual(
+            [
+                story_content["generated_image"]["file_path"]
+                for story_content in story_contents
+            ],
+            [
+                "output/images/generated_1.png",
+                "output/images/generated_2.png",
+                "output/images/generated_3.png",
+            ],
+        )
+        self.assertEqual(
+            {
+                story_content["story"]["headline"]
+                for story_content in story_contents
+            },
+            {"Finance headline", "AI headline", "Sports headline"},
+        )
+
     def test_cli_shows_ranked_order(self):
         output = io.StringIO()
 
@@ -207,11 +258,14 @@ class EditorialRankingWorkflowTests(unittest.TestCase):
         self.assertIn("Editorial Reason: Reason 1", rendered_output)
         self.assertIn("Instagram Caption: Caption for Sports headline", rendered_output)
         self.assertIn("Image Prompt: Image prompt for Sports headline", rendered_output)
+        self.assertIn("Generated Image: output/images/generated_1.png", rendered_output)
         self.assertIn("Rank 2", rendered_output)
         self.assertIn("Domain: Artificial Intelligence", rendered_output)
         self.assertIn("Instagram Caption: Caption for AI headline", rendered_output)
         self.assertIn("Image Prompt: Image prompt for AI headline", rendered_output)
+        self.assertIn("Generated Image: output/images/generated_2.png", rendered_output)
         self.assertIn("Rank 3", rendered_output)
         self.assertIn("Domain: Finance", rendered_output)
         self.assertIn("Instagram Caption: Caption for Finance headline", rendered_output)
         self.assertIn("Image Prompt: Image prompt for Finance headline", rendered_output)
+        self.assertIn("Generated Image: output/images/generated_3.png", rendered_output)

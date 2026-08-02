@@ -18,3 +18,4 @@ def run_cli(workflow: EditorialWorkflow) -> None:
             f"{story_content['instagram_content']['caption']}"
         )
         print(f"Image Prompt: {story_content['image_prompt']['image_prompt']}")
+        print(f"Generated Image: {story_content['generated_image']['file_path']}")
