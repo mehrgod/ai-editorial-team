@@ -37,6 +37,15 @@ class RecordingChiefEditor:
         ]
 
 
+class RecordingInstagramContentAgent:
+    def __init__(self) -> None:
+        self.received_stories = []
+
+    def generate_caption(self, story: Story):
+        self.received_stories.append(story)
+        return {"caption": f"Caption for {story['headline']}"}
+
+
 class EditorialRankingWorkflowTests(unittest.TestCase):
     def setUp(self) -> None:
         self.finance_story = {
@@ -58,11 +67,13 @@ class EditorialRankingWorkflowTests(unittest.TestCase):
             "reason": "Sports reason",
         }
         self.chief_editor = RecordingChiefEditor()
+        self.instagram_content_agent = RecordingInstagramContentAgent()
         self.workflow = EditorialWorkflow(
             finance_research_agent=FakeResearchAgent(self.finance_story),
             ai_research_agent=FakeResearchAgent(self.ai_story),
             sports_research_agent=FakeResearchAgent(self.sports_story),
             chief_editor=self.chief_editor,
+            instagram_content_agent=self.instagram_content_agent,
         )
 
     def test_all_three_stories_are_passed_to_chief_editor(self):
@@ -79,7 +90,7 @@ class EditorialRankingWorkflowTests(unittest.TestCase):
 
     def test_all_three_stories_are_returned_with_exact_ranks_no_duplicates(self):
         result = self.workflow.run()
-        ranked_stories = result["ranked_stories"]
+        ranked_stories = result["instagram_story_contents"]
 
         self.assertEqual(len(ranked_stories), 3)
         self.assertEqual(
@@ -94,6 +105,45 @@ class EditorialRankingWorkflowTests(unittest.TestCase):
             {"Finance headline", "AI headline", "Sports headline"},
         )
 
+    def test_instagram_agent_is_called_once_for_each_ranked_story_in_order(self):
+        self.workflow.run()
+
+        self.assertEqual(len(self.instagram_content_agent.received_stories), 3)
+        self.assertEqual(
+            [
+                story["headline"]
+                for story in self.instagram_content_agent.received_stories
+            ],
+            ["Sports headline", "AI headline", "Finance headline"],
+        )
+
+    def test_every_ranked_story_has_caption_with_no_duplicates_or_drops(self):
+        result = self.workflow.run()
+        story_contents = result["instagram_story_contents"]
+
+        self.assertEqual(
+            [story_content["rank"] for story_content in story_contents],
+            [1, 2, 3],
+        )
+        self.assertEqual(
+            [
+                story_content["instagram_content"]["caption"]
+                for story_content in story_contents
+            ],
+            [
+                "Caption for Sports headline",
+                "Caption for AI headline",
+                "Caption for Finance headline",
+            ],
+        )
+        self.assertEqual(
+            {
+                story_content["story"]["headline"]
+                for story_content in story_contents
+            },
+            {"Finance headline", "AI headline", "Sports headline"},
+        )
+
     def test_cli_shows_ranked_order(self):
         output = io.StringIO()
 
@@ -101,10 +151,14 @@ class EditorialRankingWorkflowTests(unittest.TestCase):
             run_cli(self.workflow)
 
         rendered_output = output.getvalue()
-        self.assertIn("Ranked Stories", rendered_output)
-        self.assertIn("1. [Sports] Sports headline", rendered_output)
-        self.assertIn("   Editorial Reason: Reason 1", rendered_output)
-        self.assertIn("2. [Artificial Intelligence] AI headline", rendered_output)
-        self.assertIn("   Editorial Reason: Reason 2", rendered_output)
-        self.assertIn("3. [Finance] Finance headline", rendered_output)
-        self.assertIn("   Editorial Reason: Reason 3", rendered_output)
+        self.assertIn("Rank 1", rendered_output)
+        self.assertIn("Domain: Sports", rendered_output)
+        self.assertIn("Headline: Sports headline", rendered_output)
+        self.assertIn("Editorial Reason: Reason 1", rendered_output)
+        self.assertIn("Instagram Caption: Caption for Sports headline", rendered_output)
+        self.assertIn("Rank 2", rendered_output)
+        self.assertIn("Domain: Artificial Intelligence", rendered_output)
+        self.assertIn("Instagram Caption: Caption for AI headline", rendered_output)
+        self.assertIn("Rank 3", rendered_output)
+        self.assertIn("Domain: Finance", rendered_output)
+        self.assertIn("Instagram Caption: Caption for Finance headline", rendered_output)

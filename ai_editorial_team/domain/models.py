@@ -17,11 +17,15 @@ class RankedStory(TypedDict):
 
 
 class EditorialPackage(TypedDict):
-    ranked_stories: List[RankedStory]
+    instagram_story_contents: List["InstagramStoryContent"]
 
 
 class InstagramContent(TypedDict):
     caption: str
+
+
+class InstagramStoryContent(RankedStory):
+    instagram_content: InstagramContent
 
 
 class XContent(TypedDict):
@@ -56,3 +60,4 @@ class PublicationResult(TypedDict):
 class EditorialState(TypedDict, total=False):
     stories: List[Story]
     ranked_stories: List[RankedStory]
+    instagram_story_contents: List[InstagramStoryContent]

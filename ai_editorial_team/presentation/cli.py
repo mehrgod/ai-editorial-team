@@ -2,16 +2,18 @@ from ai_editorial_team.application.workflow import EditorialWorkflow
 
 
 def run_cli(workflow: EditorialWorkflow) -> None:
-    """Run the editorial workflow and print the ranked stories."""
+    """Run the editorial workflow and print ranked Instagram content."""
     result = workflow.run()
-    ranked_stories = result["ranked_stories"]
+    instagram_story_contents = result["instagram_story_contents"]
 
-    print("\nRanked Stories")
-    print("==============")
-    for ranked_story in ranked_stories:
-        story = ranked_story["story"]
+    for story_content in instagram_story_contents:
+        story = story_content["story"]
+        print(f"\nRank {story_content['rank']}")
+        print("======")
+        print(f"Domain: {story['domain']}")
+        print(f"Headline: {story['headline']}")
+        print(f"Editorial Reason: {story_content['editorial_reason']}")
         print(
-            f"\n{ranked_story['rank']}. "
-            f"[{story['domain']}] {story['headline']}"
+            "Instagram Caption: "
+            f"{story_content['instagram_content']['caption']}"
         )
-        print(f"   Editorial Reason: {ranked_story['editorial_reason']}")
