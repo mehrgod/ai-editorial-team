@@ -25,6 +25,10 @@ def main() -> None:
     from ai_editorial_team.infrastructure.image_generation.openai_image_generator import (
         OpenAIImageGenerator,
     )
+    from ai_editorial_team.infrastructure.image_storage.s3_image_storage import (
+        S3ImageStorageError,
+        create_s3_image_storage_from_env,
+    )
     from ai_editorial_team.infrastructure.research.rss_agents import (
         RssFeedError,
         create_ai_research_agent,
@@ -64,11 +68,13 @@ def main() -> None:
                 client=openai_bundle.client,
                 model=openai_bundle.image_model,
             ),
+            image_storage=create_s3_image_storage_from_env(),
         )
         run_cli(workflow)
     except (
         RssFeedError,
         OpenAIInfrastructureError,
+        S3ImageStorageError,
     ) as exc:
         raise SystemExit(f"Error: {exc}")
 

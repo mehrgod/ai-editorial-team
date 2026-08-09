@@ -19,3 +19,5 @@ def run_cli(workflow: EditorialWorkflow) -> None:
         )
         print(f"Image Prompt: {story_content['image_prompt']['image_prompt']}")
         print(f"Generated Image: {story_content['generated_image']['file_path']}")
+        print(f"S3 Object Key: {story_content['stored_image']['object_key']}")
+        print(f"Presigned Image URL: {story_content['stored_image']['public_url']}")

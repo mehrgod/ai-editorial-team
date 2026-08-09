@@ -15,6 +15,7 @@ from ai_editorial_team.domain.ports import (
     ChiefEditor,
     ImageGenerator,
     ImagePromptAgent,
+    ImageStorage,
     InstagramContentAgent,
     ResearchAgent,
 )
@@ -27,6 +28,7 @@ EDITOR_NODE = "Chief Editor Agent"
 INSTAGRAM_NODE = "Instagram Content Agent"
 IMAGE_PROMPT_NODE = "Image Prompt Agent"
 IMAGE_GENERATOR_NODE = "Image Generator"
+S3_IMAGE_STORAGE_NODE = "S3 Image Storage"
 
 
 class ResearchNodeResult(TypedDict):
@@ -52,6 +54,7 @@ class EditorialWorkflow:
     instagram_content_agent: InstagramContentAgent
     image_prompt_agent: ImagePromptAgent
     image_generator: ImageGenerator
+    image_storage: ImageStorage
 
     def run(self) -> EditorialPackage:
         app = self._build_graph()
@@ -74,6 +77,7 @@ class EditorialWorkflow:
         graph.add_node(INSTAGRAM_NODE, self._instagram_content_node)
         graph.add_node(IMAGE_PROMPT_NODE, self._image_prompt_node)
         graph.add_node(IMAGE_GENERATOR_NODE, self._image_generator_node)
+        graph.add_node(S3_IMAGE_STORAGE_NODE, self._s3_image_storage_node)
 
         graph.add_edge(START, FINANCE_NODE)
         graph.add_edge(START, AI_NODE)
@@ -85,7 +89,8 @@ class EditorialWorkflow:
         graph.add_edge(EDITOR_NODE, INSTAGRAM_NODE)
         graph.add_edge(INSTAGRAM_NODE, IMAGE_PROMPT_NODE)
         graph.add_edge(IMAGE_PROMPT_NODE, IMAGE_GENERATOR_NODE)
-        graph.add_edge(IMAGE_GENERATOR_NODE, END)
+        graph.add_edge(IMAGE_GENERATOR_NODE, S3_IMAGE_STORAGE_NODE)
+        graph.add_edge(S3_IMAGE_STORAGE_NODE, END)
 
         return graph.compile()
 
@@ -149,6 +154,24 @@ class EditorialWorkflow:
                     "image_prompt": story_content["image_prompt"],
                     "generated_image": self.image_generator.generate(
                         story_content["image_prompt"]["image_prompt"]
+                    ),
+                }
+                for story_content in state["instagram_story_contents"]
+            ]
+        }
+
+    def _s3_image_storage_node(self, state: EditorialGraphState) -> dict:
+        return {
+            "instagram_story_contents": [
+                {
+                    "rank": story_content["rank"],
+                    "story": story_content["story"],
+                    "editorial_reason": story_content["editorial_reason"],
+                    "instagram_content": story_content["instagram_content"],
+                    "image_prompt": story_content["image_prompt"],
+                    "generated_image": story_content["generated_image"],
+                    "stored_image": self.image_storage.store(
+                        story_content["generated_image"]["file_path"]
                     ),
                 }
                 for story_content in state["instagram_story_contents"]

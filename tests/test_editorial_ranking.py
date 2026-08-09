@@ -64,6 +64,19 @@ class RecordingImageGenerator:
         return {"file_path": f"output/images/generated_{len(self.received_prompts)}.png"}
 
 
+class RecordingImageStorage:
+    def __init__(self) -> None:
+        self.received_file_paths = []
+
+    def store(self, local_file_path: str):
+        self.received_file_paths.append(local_file_path)
+        index = len(self.received_file_paths)
+        return {
+            "object_key": f"images/generated_{index}.png",
+            "public_url": f"https://example.com/generated_{index}.png",
+        }
+
+
 class EditorialRankingWorkflowTests(unittest.TestCase):
     def setUp(self) -> None:
         self.finance_story = {
@@ -88,6 +101,7 @@ class EditorialRankingWorkflowTests(unittest.TestCase):
         self.instagram_content_agent = RecordingInstagramContentAgent()
         self.image_prompt_agent = RecordingImagePromptAgent()
         self.image_generator = RecordingImageGenerator()
+        self.image_storage = RecordingImageStorage()
         self.workflow = EditorialWorkflow(
             finance_research_agent=FakeResearchAgent(self.finance_story),
             ai_research_agent=FakeResearchAgent(self.ai_story),
@@ -96,6 +110,7 @@ class EditorialRankingWorkflowTests(unittest.TestCase):
             instagram_content_agent=self.instagram_content_agent,
             image_prompt_agent=self.image_prompt_agent,
             image_generator=self.image_generator,
+            image_storage=self.image_storage,
         )
 
     def test_all_three_stories_are_passed_to_chief_editor(self):
@@ -245,6 +260,57 @@ class EditorialRankingWorkflowTests(unittest.TestCase):
             {"Finance headline", "AI headline", "Sports headline"},
         )
 
+    def test_image_storage_is_called_once_for_each_generated_image_in_order(self):
+        self.workflow.run()
+
+        self.assertEqual(len(self.image_storage.received_file_paths), 3)
+        self.assertEqual(
+            self.image_storage.received_file_paths,
+            [
+                "output/images/generated_1.png",
+                "output/images/generated_2.png",
+                "output/images/generated_3.png",
+            ],
+        )
+
+    def test_every_ranked_story_has_stored_image_with_no_duplicates_or_drops(self):
+        result = self.workflow.run()
+        story_contents = result["instagram_story_contents"]
+
+        self.assertEqual(
+            [story_content["rank"] for story_content in story_contents],
+            [1, 2, 3],
+        )
+        self.assertEqual(
+            [
+                story_content["stored_image"]["object_key"]
+                for story_content in story_contents
+            ],
+            [
+                "images/generated_1.png",
+                "images/generated_2.png",
+                "images/generated_3.png",
+            ],
+        )
+        self.assertEqual(
+            [
+                story_content["stored_image"]["public_url"]
+                for story_content in story_contents
+            ],
+            [
+                "https://example.com/generated_1.png",
+                "https://example.com/generated_2.png",
+                "https://example.com/generated_3.png",
+            ],
+        )
+        self.assertEqual(
+            {
+                story_content["story"]["headline"]
+                for story_content in story_contents
+            },
+            {"Finance headline", "AI headline", "Sports headline"},
+        )
+
     def test_cli_shows_ranked_order(self):
         output = io.StringIO()
 
@@ -259,13 +325,28 @@ class EditorialRankingWorkflowTests(unittest.TestCase):
         self.assertIn("Instagram Caption: Caption for Sports headline", rendered_output)
         self.assertIn("Image Prompt: Image prompt for Sports headline", rendered_output)
         self.assertIn("Generated Image: output/images/generated_1.png", rendered_output)
+        self.assertIn("S3 Object Key: images/generated_1.png", rendered_output)
+        self.assertIn(
+            "Presigned Image URL: https://example.com/generated_1.png",
+            rendered_output,
+        )
         self.assertIn("Rank 2", rendered_output)
         self.assertIn("Domain: Artificial Intelligence", rendered_output)
         self.assertIn("Instagram Caption: Caption for AI headline", rendered_output)
         self.assertIn("Image Prompt: Image prompt for AI headline", rendered_output)
         self.assertIn("Generated Image: output/images/generated_2.png", rendered_output)
+        self.assertIn("S3 Object Key: images/generated_2.png", rendered_output)
+        self.assertIn(
+            "Presigned Image URL: https://example.com/generated_2.png",
+            rendered_output,
+        )
         self.assertIn("Rank 3", rendered_output)
         self.assertIn("Domain: Finance", rendered_output)
         self.assertIn("Instagram Caption: Caption for Finance headline", rendered_output)
         self.assertIn("Image Prompt: Image prompt for Finance headline", rendered_output)
         self.assertIn("Generated Image: output/images/generated_3.png", rendered_output)
+        self.assertIn("S3 Object Key: images/generated_3.png", rendered_output)
+        self.assertIn(
+            "Presigned Image URL: https://example.com/generated_3.png",
+            rendered_output,
+        )

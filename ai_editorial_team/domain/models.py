@@ -28,6 +28,7 @@ class InstagramStoryContent(RankedStory):
     instagram_content: InstagramContent
     image_prompt: "ImagePrompt"
     generated_image: "GeneratedImage"
+    stored_image: "StoredImage"
 
 
 class XContent(TypedDict):
