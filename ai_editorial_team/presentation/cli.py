@@ -28,3 +28,14 @@ def run_cli(workflow: EditorialWorkflow) -> None:
     print(f"Platform: {publication['platform']}")
     print(f"Publication ID: {publication['publication_id']}")
     print(f"URL: {publication['publication_url']}")
+
+    print("\nX Post")
+    print("======")
+    print(result["x_content"]["post"])
+
+    x_publication = result["x_publication"]
+    print("\nX Published")
+    print("===========")
+    print(f"Platform: {x_publication['platform']}")
+    print(f"Publication ID: {x_publication['publication_id']}")
+    print(f"URL: {x_publication['publication_url']}")

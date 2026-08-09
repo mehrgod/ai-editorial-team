@@ -37,7 +37,7 @@ class InstagramContentAgent(Protocol):
 class XContentAgent(Protocol):
     """Interface for agents that generate X content."""
 
-    def generate_post(self, story: Story) -> XContent:
+    def generate_post(self, ranked_stories: List[RankedStory]) -> XContent:
         ...
 
 

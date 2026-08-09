@@ -13,7 +13,13 @@ from dotenv import load_dotenv
 AUTHORIZATION_URL = "https://x.com/i/oauth2/authorize"
 TOKEN_URL = "https://api.x.com/2/oauth2/token"
 CALLBACK_URL = "http://127.0.0.1:8000/callback"
-SCOPES = ["tweet.read", "tweet.write", "users.read", "offline.access"]
+SCOPES = [
+    "tweet.read",
+    "tweet.write",
+    "users.read",
+    "media.write",
+    "offline.access",
+]
 
 
 def main() -> None:

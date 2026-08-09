@@ -1,6 +1,9 @@
+from base64 import b64encode
 from dataclasses import dataclass
 import json
+import mimetypes
 import os
+from pathlib import Path
 from typing import Any, Protocol
 from urllib import error as urllib_error
 from urllib import request as urllib_request
@@ -33,6 +36,10 @@ class XPostCreationError(XPublishingError):
     """Raised when X post creation fails."""
 
 
+class XMediaUploadError(XPublishingError):
+    """Raised when X media upload fails."""
+
+
 class XPublicationResponseError(XPublishingError):
     """Raised when X returns an incomplete response."""
 
@@ -58,7 +65,10 @@ class XPublishingConfig:
 
 
 class XApi(Protocol):
-    def create_post(self, text: str) -> str:
+    def upload_media(self, local_file_path: str) -> str:
+        ...
+
+    def create_post(self, text: str, media_ids: list[str]) -> str:
         ...
 
 
@@ -66,10 +76,38 @@ class XApi(Protocol):
 class XHttpApi:
     config: XPublishingConfig
 
-    def create_post(self, text: str) -> str:
+    def upload_media(self, local_file_path: str) -> str:
+        image_path = Path(local_file_path)
+        media_type = mimetypes.guess_type(image_path)[0] or "image/png"
+        try:
+            image_bytes = image_path.read_bytes()
+        except OSError as exc:
+            raise XMediaUploadError(
+                f"X media upload could not read image file {image_path}: {exc}"
+            ) from exc
+
+        data = self._post_json(
+            f"{X_API_BASE_URL}/2/media/upload",
+            {
+                "media": b64encode(image_bytes).decode("ascii"),
+                "media_category": "tweet_image",
+                "media_type": media_type,
+            },
+        )
+        media_id = data.get("data", {}).get("id")
+        if not media_id:
+            raise XPublicationResponseError(
+                "X media upload response did not include an id."
+            )
+        return str(media_id)
+
+    def create_post(self, text: str, media_ids: list[str]) -> str:
         data = self._post_json(
             f"{X_API_BASE_URL}/2/tweets",
-            {"text": text},
+            {
+                "text": text,
+                "media": {"media_ids": media_ids},
+            },
         )
         post_id = data.get("data", {}).get("id")
         if not post_id:
@@ -78,7 +116,7 @@ class XHttpApi:
             )
         return str(post_id)
 
-    def _post_json(self, url: str, payload: dict[str, str]) -> dict[str, Any]:
+    def _post_json(self, url: str, payload: dict[str, Any]) -> dict[str, Any]:
         encoded_body = json.dumps(payload).encode("utf-8")
         request = urllib_request.Request(
             url,
@@ -126,7 +164,7 @@ class XHttpApi:
 
 @dataclass(frozen=True)
 class XPublisher(SocialPublisher):
-    """Publishes one text-only X post."""
+    """Publishes one X post with three attached images."""
 
     api: XApi
 
@@ -134,9 +172,32 @@ class XPublisher(SocialPublisher):
         text = publication.get("text")
         if not text:
             raise XPostCreationError("X publishing requires post text.")
+        if len(text) > 250:
+            raise XPostCreationError(
+                "X publishing requires post text <= 250 characters."
+            )
+
+        image_paths = publication.get("image_paths") or []
+        if len(image_paths) != 3:
+            raise XMediaUploadError("X publishing requires exactly 3 image paths.")
+        for image_path in image_paths:
+            if not Path(image_path).is_file():
+                raise XMediaUploadError(
+                    f"X publishing image file was not found: {image_path}"
+                )
 
         try:
-            post_id = self.api.create_post(text)
+            media_ids = [
+                self.api.upload_media(image_path)
+                for image_path in image_paths
+            ]
+        except XAuthenticationError:
+            raise
+        except XPublishingError as exc:
+            raise XMediaUploadError(f"X media upload failed: {exc}") from exc
+
+        try:
+            post_id = self.api.create_post(text, media_ids)
         except XAuthenticationError:
             raise
         except XPublishingError as exc:

@@ -19,6 +19,8 @@ class RankedStory(TypedDict):
 class EditorialPackage(TypedDict):
     instagram_story_contents: List["InstagramStoryContent"]
     instagram_publication: "PublicationResult"
+    x_content: "XContent"
+    x_publication: "PublicationResult"
 
 
 class InstagramContent(TypedDict):
@@ -53,6 +55,7 @@ class PublicationRequest(TypedDict):
     caption: NotRequired[str]
     image_url: NotRequired[str]
     image_urls: NotRequired[List[str]]
+    image_paths: NotRequired[List[str]]
     text: NotRequired[str]
 
 
@@ -67,3 +70,5 @@ class EditorialState(TypedDict, total=False):
     ranked_stories: List[RankedStory]
     instagram_story_contents: List[InstagramStoryContent]
     instagram_publication: PublicationResult
+    x_content: XContent
+    x_publication: PublicationResult

@@ -22,6 +22,9 @@ def main() -> None:
     from ai_editorial_team.infrastructure.content.openai_image_prompt_agent import (
         ImagePromptAgent,
     )
+    from ai_editorial_team.infrastructure.content.openai_x_content_agent import (
+        XContentAgent,
+    )
     from ai_editorial_team.infrastructure.image_generation.openai_image_generator import (
         OpenAIImageGenerator,
     )
@@ -49,6 +52,10 @@ def main() -> None:
         InstagramPublishingError,
         create_instagram_publisher_from_env,
     )
+    from ai_editorial_team.infrastructure.publishing.x_publisher import (
+        XPublishingError,
+        create_x_publisher_from_env,
+    )
 
     try:
         openai_bundle = create_openai_client_bundle_from_env()
@@ -57,6 +64,10 @@ def main() -> None:
             ai_research_agent=create_ai_research_agent(),
             sports_research_agent=create_sports_research_agent(),
             chief_editor=LLMChiefEditor(
+                client=openai_bundle.client,
+                model=openai_bundle.model,
+            ),
+            x_content_agent=XContentAgent(
                 client=openai_bundle.client,
                 model=openai_bundle.model,
             ),
@@ -74,6 +85,7 @@ def main() -> None:
             ),
             image_storage=create_s3_image_storage_from_env(),
             instagram_publisher=create_instagram_publisher_from_env(),
+            x_publisher=create_x_publisher_from_env(),
         )
         run_cli(workflow)
     except (
@@ -81,6 +93,7 @@ def main() -> None:
         OpenAIInfrastructureError,
         S3ImageStorageError,
         InstagramPublishingError,
+        XPublishingError,
     ) as exc:
         raise SystemExit(f"Error: {exc}")
 
