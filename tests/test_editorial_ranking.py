@@ -77,6 +77,19 @@ class RecordingImageStorage:
         }
 
 
+class RecordingInstagramPublisher:
+    def __init__(self) -> None:
+        self.received_publications = []
+
+    def publish(self, publication):
+        self.received_publications.append(publication)
+        return {
+            "platform": "Instagram",
+            "publication_id": "carousel-123",
+            "publication_url": "https://instagram.com/p/carousel-123",
+        }
+
+
 class EditorialRankingWorkflowTests(unittest.TestCase):
     def setUp(self) -> None:
         self.finance_story = {
@@ -102,6 +115,7 @@ class EditorialRankingWorkflowTests(unittest.TestCase):
         self.image_prompt_agent = RecordingImagePromptAgent()
         self.image_generator = RecordingImageGenerator()
         self.image_storage = RecordingImageStorage()
+        self.instagram_publisher = RecordingInstagramPublisher()
         self.workflow = EditorialWorkflow(
             finance_research_agent=FakeResearchAgent(self.finance_story),
             ai_research_agent=FakeResearchAgent(self.ai_story),
@@ -111,6 +125,7 @@ class EditorialRankingWorkflowTests(unittest.TestCase):
             image_prompt_agent=self.image_prompt_agent,
             image_generator=self.image_generator,
             image_storage=self.image_storage,
+            instagram_publisher=self.instagram_publisher,
         )
 
     def test_all_three_stories_are_passed_to_chief_editor(self):
@@ -311,6 +326,34 @@ class EditorialRankingWorkflowTests(unittest.TestCase):
             {"Finance headline", "AI headline", "Sports headline"},
         )
 
+    def test_instagram_publisher_receives_rank_ordered_carousel_once(self):
+        self.workflow.run()
+
+        self.assertEqual(len(self.instagram_publisher.received_publications), 1)
+        self.assertEqual(
+            self.instagram_publisher.received_publications[0],
+            {
+                "caption": "Caption for Sports headline",
+                "image_urls": [
+                    "https://example.com/generated_1.png",
+                    "https://example.com/generated_2.png",
+                    "https://example.com/generated_3.png",
+                ],
+            },
+        )
+
+    def test_final_publication_result_is_returned(self):
+        result = self.workflow.run()
+
+        self.assertEqual(
+            result["instagram_publication"],
+            {
+                "platform": "Instagram",
+                "publication_id": "carousel-123",
+                "publication_url": "https://instagram.com/p/carousel-123",
+            },
+        )
+
     def test_cli_shows_ranked_order(self):
         output = io.StringIO()
 
@@ -350,3 +393,7 @@ class EditorialRankingWorkflowTests(unittest.TestCase):
             "Presigned Image URL: https://example.com/generated_3.png",
             rendered_output,
         )
+        self.assertIn("Instagram Carousel Published", rendered_output)
+        self.assertIn("Platform: Instagram", rendered_output)
+        self.assertIn("Publication ID: carousel-123", rendered_output)
+        self.assertIn("URL: https://instagram.com/p/carousel-123", rendered_output)

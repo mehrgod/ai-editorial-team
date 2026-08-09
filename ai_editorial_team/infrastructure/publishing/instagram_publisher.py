@@ -88,7 +88,12 @@ class InstagramPublishingConfig:
 
 
 class InstagramGraphApi(Protocol):
-    def create_media_container(self, caption: str, image_url: str) -> str:
+    def create_carousel_item_container(self, image_url: str) -> str:
+        ...
+
+    def create_carousel_container(
+        self, caption: str, child_container_ids: list[str]
+    ) -> str:
         ...
 
     def fetch_container_status(self, container_id: str) -> str:
@@ -105,11 +110,30 @@ class InstagramGraphApi(Protocol):
 class MetaInstagramGraphApi:
     config: InstagramPublishingConfig
 
-    def create_media_container(self, caption: str, image_url: str) -> str:
+    def create_carousel_item_container(self, image_url: str) -> str:
         data = self._post_json(
             self._graph_url(f"/{self.config.instagram_professional_account_id}/media"),
             {
                 "image_url": image_url,
+                "is_carousel_item": "true",
+                "access_token": self.config.meta_access_token,
+            },
+        )
+        container_id = data.get("id")
+        if not container_id:
+            raise InstagramMediaContainerError(
+                "Instagram carousel item container response did not include an id."
+            )
+        return str(container_id)
+
+    def create_carousel_container(
+        self, caption: str, child_container_ids: list[str]
+    ) -> str:
+        data = self._post_json(
+            self._graph_url(f"/{self.config.instagram_professional_account_id}/media"),
+            {
+                "media_type": "CAROUSEL",
+                "children": ",".join(child_container_ids),
                 "caption": caption,
                 "access_token": self.config.meta_access_token,
             },
@@ -117,7 +141,7 @@ class MetaInstagramGraphApi:
         container_id = data.get("id")
         if not container_id:
             raise InstagramMediaContainerError(
-                "Instagram media container response did not include an id."
+                "Instagram carousel parent container response did not include an id."
             )
         return str(container_id)
 
@@ -230,29 +254,60 @@ class MetaInstagramGraphApi:
 
 @dataclass(frozen=True)
 class InstagramPublisher(SocialPublisher):
-    """Publishes one Instagram image post using the Graph API."""
+    """Publishes one Instagram carousel using the Graph API."""
 
     api: InstagramGraphApi
     status_attempts: int = CONTAINER_STATUS_ATTEMPTS
     status_delay_seconds: int = CONTAINER_STATUS_DELAY_SECONDS
 
     def publish(self, publication: PublicationRequest) -> PublicationResult:
+        caption = publication.get("caption")
+        if not caption:
+            raise InstagramMediaContainerError(
+                "Instagram carousel publishing requires a caption."
+            )
+
+        image_urls = publication.get("image_urls") or []
+        if len(image_urls) != 3:
+            raise InstagramMediaContainerError(
+                "Instagram carousel publishing requires exactly 3 image URLs."
+            )
+        if any(not image_url for image_url in image_urls):
+            raise InstagramMediaContainerError(
+                "Instagram carousel publishing requires every image URL to be set."
+            )
+
         try:
-            container_id = self.api.create_media_container(
-                caption=publication["caption"],
-                image_url=publication["image_url"],
+            child_container_ids = [
+                self.api.create_carousel_item_container(image_url)
+                for image_url in image_urls
+            ]
+        except InstagramAuthenticationError:
+            raise
+        except InstagramPublishingError as exc:
+            raise InstagramMediaContainerError(
+                f"Instagram carousel item container creation failed: {exc}"
+            ) from exc
+
+        for child_container_id in child_container_ids:
+            self._wait_until_container_ready(child_container_id)
+
+        try:
+            parent_container_id = self.api.create_carousel_container(
+                caption=caption,
+                child_container_ids=child_container_ids,
             )
         except InstagramAuthenticationError:
             raise
         except InstagramPublishingError as exc:
             raise InstagramMediaContainerError(
-                f"Instagram media container creation failed: {exc}"
+                f"Instagram carousel parent container creation failed: {exc}"
             ) from exc
 
-        self._wait_until_container_ready(container_id)
+        self._wait_until_container_ready(parent_container_id)
 
         try:
-            publication_id = self.api.publish_media_container(container_id)
+            publication_id = self.api.publish_media_container(parent_container_id)
         except InstagramAuthenticationError:
             raise
         except InstagramPublishingError as exc:

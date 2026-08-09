@@ -21,3 +21,10 @@ def run_cli(workflow: EditorialWorkflow) -> None:
         print(f"Generated Image: {story_content['generated_image']['file_path']}")
         print(f"S3 Object Key: {story_content['stored_image']['object_key']}")
         print(f"Presigned Image URL: {story_content['stored_image']['public_url']}")
+
+    publication = result["instagram_publication"]
+    print("\nInstagram Carousel Published")
+    print("============================")
+    print(f"Platform: {publication['platform']}")
+    print(f"Publication ID: {publication['publication_id']}")
+    print(f"URL: {publication['publication_url']}")

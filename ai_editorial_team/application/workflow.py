@@ -8,6 +8,7 @@ from typing_extensions import Annotated, TypedDict
 from ai_editorial_team.domain.models import (
     EditorialPackage,
     InstagramStoryContent,
+    PublicationResult,
     RankedStory,
     Story,
 )
@@ -18,6 +19,7 @@ from ai_editorial_team.domain.ports import (
     ImageStorage,
     InstagramContentAgent,
     ResearchAgent,
+    SocialPublisher,
 )
 
 
@@ -29,6 +31,7 @@ INSTAGRAM_NODE = "Instagram Content Agent"
 IMAGE_PROMPT_NODE = "Image Prompt Agent"
 IMAGE_GENERATOR_NODE = "Image Generator"
 S3_IMAGE_STORAGE_NODE = "S3 Image Storage"
+INSTAGRAM_PUBLISHER_NODE = "Instagram Carousel Publisher"
 
 
 class ResearchNodeResult(TypedDict):
@@ -41,6 +44,7 @@ class EditorialGraphState(TypedDict, total=False):
     stories: Annotated[List[Story], add]
     ranked_stories: List[RankedStory]
     instagram_story_contents: List[InstagramStoryContent]
+    instagram_publication: PublicationResult
 
 
 @dataclass(frozen=True)
@@ -55,12 +59,14 @@ class EditorialWorkflow:
     image_prompt_agent: ImagePromptAgent
     image_generator: ImageGenerator
     image_storage: ImageStorage
+    instagram_publisher: SocialPublisher
 
     def run(self) -> EditorialPackage:
         app = self._build_graph()
         result = app.invoke({"stories": []})
         return {
-            "instagram_story_contents": result["instagram_story_contents"]
+            "instagram_story_contents": result["instagram_story_contents"],
+            "instagram_publication": result["instagram_publication"],
         }
 
     def _build_graph(self):
@@ -78,6 +84,7 @@ class EditorialWorkflow:
         graph.add_node(IMAGE_PROMPT_NODE, self._image_prompt_node)
         graph.add_node(IMAGE_GENERATOR_NODE, self._image_generator_node)
         graph.add_node(S3_IMAGE_STORAGE_NODE, self._s3_image_storage_node)
+        graph.add_node(INSTAGRAM_PUBLISHER_NODE, self._instagram_publisher_node)
 
         graph.add_edge(START, FINANCE_NODE)
         graph.add_edge(START, AI_NODE)
@@ -90,7 +97,8 @@ class EditorialWorkflow:
         graph.add_edge(INSTAGRAM_NODE, IMAGE_PROMPT_NODE)
         graph.add_edge(IMAGE_PROMPT_NODE, IMAGE_GENERATOR_NODE)
         graph.add_edge(IMAGE_GENERATOR_NODE, S3_IMAGE_STORAGE_NODE)
-        graph.add_edge(S3_IMAGE_STORAGE_NODE, END)
+        graph.add_edge(S3_IMAGE_STORAGE_NODE, INSTAGRAM_PUBLISHER_NODE)
+        graph.add_edge(INSTAGRAM_PUBLISHER_NODE, END)
 
         return graph.compile()
 
@@ -177,3 +185,42 @@ class EditorialWorkflow:
                 for story_content in state["instagram_story_contents"]
             ]
         }
+
+    def _instagram_publisher_node(self, state: EditorialGraphState) -> dict:
+        story_contents = state["instagram_story_contents"]
+        _validate_carousel_story_contents(story_contents)
+
+        return {
+            "instagram_publication": self.instagram_publisher.publish(
+                {
+                    "caption": story_contents[0]["instagram_content"]["caption"],
+                    "image_urls": [
+                        story_content["stored_image"]["public_url"]
+                        for story_content in story_contents
+                    ],
+                }
+            )
+        }
+
+
+def _validate_carousel_story_contents(
+    story_contents: List[InstagramStoryContent],
+) -> None:
+    if len(story_contents) != 3:
+        raise ValueError(
+            "Instagram carousel publishing requires exactly 3 ranked story items."
+        )
+
+    ranks = [story_content["rank"] for story_content in story_contents]
+    if ranks != [1, 2, 3]:
+        raise ValueError(
+            "Instagram carousel publishing requires story items ordered by "
+            "rank 1, 2, 3."
+        )
+
+    for story_content in story_contents:
+        if not story_content["stored_image"]["public_url"]:
+            raise ValueError(
+                "Instagram carousel publishing requires every story item to "
+                "have a stored image URL."
+            )

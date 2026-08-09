@@ -45,6 +45,10 @@ def main() -> None:
     from ai_editorial_team.infrastructure.openai.config import (
         OpenAIInfrastructureError,
     )
+    from ai_editorial_team.infrastructure.publishing.instagram_publisher import (
+        InstagramPublishingError,
+        create_instagram_publisher_from_env,
+    )
 
     try:
         openai_bundle = create_openai_client_bundle_from_env()
@@ -69,12 +73,14 @@ def main() -> None:
                 model=openai_bundle.image_model,
             ),
             image_storage=create_s3_image_storage_from_env(),
+            instagram_publisher=create_instagram_publisher_from_env(),
         )
         run_cli(workflow)
     except (
         RssFeedError,
         OpenAIInfrastructureError,
         S3ImageStorageError,
+        InstagramPublishingError,
     ) as exc:
         raise SystemExit(f"Error: {exc}")
 
