@@ -35,8 +35,6 @@ class S3Client(Protocol):
 
 @dataclass(frozen=True)
 class S3ImageStorageConfig:
-    aws_access_key_id: str
-    aws_secret_access_key: str
     aws_region: str
     bucket_name: str
 
@@ -44,16 +42,12 @@ class S3ImageStorageConfig:
     def from_env(cls) -> "S3ImageStorageConfig":
         load_dotenv()
 
-        aws_access_key_id = os.environ.get("AWS_ACCESS_KEY_ID")
-        aws_secret_access_key = os.environ.get("AWS_SECRET_ACCESS_KEY")
         aws_region = os.environ.get("AWS_REGION")
         bucket_name = os.environ.get("S3_BUCKET_NAME")
 
         missing = [
             name
             for name, value in [
-                ("AWS_ACCESS_KEY_ID", aws_access_key_id),
-                ("AWS_SECRET_ACCESS_KEY", aws_secret_access_key),
                 ("AWS_REGION", aws_region),
                 ("S3_BUCKET_NAME", bucket_name),
             ]
@@ -66,8 +60,6 @@ class S3ImageStorageConfig:
             )
 
         return cls(
-            aws_access_key_id=aws_access_key_id,
-            aws_secret_access_key=aws_secret_access_key,
             aws_region=aws_region,
             bucket_name=bucket_name,
         )
@@ -143,8 +135,6 @@ def create_s3_image_storage_from_env() -> S3ImageStorage:
 
     client = boto3.client(
         "s3",
-        aws_access_key_id=config.aws_access_key_id,
-        aws_secret_access_key=config.aws_secret_access_key,
         region_name=config.aws_region,
     )
     return S3ImageStorage(
