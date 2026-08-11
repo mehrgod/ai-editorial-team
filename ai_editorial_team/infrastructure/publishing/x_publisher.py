@@ -57,29 +57,22 @@ class XPublicationResponseError(XPublishingError):
 
 @dataclass(frozen=True)
 class XPublishingConfig:
-    user_access_token: str
-    refresh_token: str
     client_id: str
     client_secret: str
+    user_access_token: str = ""
+    refresh_token: str = ""
     secrets_manager_secret_name: str = X_SECRETS_MANAGER_SECRET_NAME
 
     @classmethod
     def from_env(cls) -> "XPublishingConfig":
         load_dotenv()
 
-        user_access_token = (
-            os.environ.get("X_ACCESS_TOKEN")
-            or os.environ.get("X_USER_ACCESS_TOKEN")
-        )
-        refresh_token = os.environ.get("X_REFRESH_TOKEN")
         client_id = os.environ.get("X_CLIENT_ID")
         client_secret = os.environ.get("X_CLIENT_SECRET")
 
         missing = [
             name
             for name, value in [
-                ("X_ACCESS_TOKEN", user_access_token),
-                ("X_REFRESH_TOKEN", refresh_token),
                 ("X_CLIENT_ID", client_id),
                 ("X_CLIENT_SECRET", client_secret),
             ]
@@ -92,11 +85,15 @@ class XPublishingConfig:
             )
 
         return cls(
-            user_access_token=user_access_token,
-            refresh_token=refresh_token,
             client_id=client_id,
             client_secret=client_secret,
         )
+
+
+@dataclass(frozen=True)
+class XStoredTokens:
+    access_token: str
+    refresh_token: str
 
 
 @dataclass(frozen=True)
@@ -278,8 +275,18 @@ def _extract_x_error_message(body: str) -> str | None:
 
 def create_x_publisher_from_env() -> XPublisher:
     config = XPublishingConfig.from_env()
-    refreshed_tokens = _refresh_x_oauth_token(config)
-    refresh_token = refreshed_tokens.refresh_token or config.refresh_token
+    stored_tokens = _read_x_tokens_from_secrets_manager(
+        config.secrets_manager_secret_name
+    )
+    refresh_config = XPublishingConfig(
+        client_id=config.client_id,
+        client_secret=config.client_secret,
+        user_access_token=stored_tokens.access_token,
+        refresh_token=stored_tokens.refresh_token,
+        secrets_manager_secret_name=config.secrets_manager_secret_name,
+    )
+    refreshed_tokens = _refresh_x_oauth_token(refresh_config)
+    refresh_token = refreshed_tokens.refresh_token or stored_tokens.refresh_token
     _update_x_tokens_in_secrets_manager(
         secret_id=config.secrets_manager_secret_name,
         access_token=refreshed_tokens.access_token,
@@ -288,10 +295,10 @@ def create_x_publisher_from_env() -> XPublisher:
     return XPublisher(
         api=XHttpApi(
             XPublishingConfig(
-                user_access_token=refreshed_tokens.access_token,
-                refresh_token=refresh_token,
                 client_id=config.client_id,
                 client_secret=config.client_secret,
+                user_access_token=refreshed_tokens.access_token,
+                refresh_token=refresh_token,
                 secrets_manager_secret_name=config.secrets_manager_secret_name,
             )
         )
@@ -352,6 +359,38 @@ def _refresh_x_oauth_token(config: XPublishingConfig) -> XTokenRefreshResult:
     )
 
 
+def _read_x_tokens_from_secrets_manager(secret_id: str) -> XStoredTokens:
+    import boto3
+
+    client = boto3.client("secretsmanager")
+    return _read_x_tokens_from_secret(client=client, secret_id=secret_id)
+
+
+def _read_x_tokens_from_secret(*, client, secret_id: str) -> XStoredTokens:
+    secret_payload = _read_secret_payload(client=client, secret_id=secret_id)
+    access_token = secret_payload.get("X_ACCESS_TOKEN")
+    refresh_token = secret_payload.get("X_REFRESH_TOKEN")
+
+    missing = [
+        name
+        for name, value in [
+            ("X_ACCESS_TOKEN", access_token),
+            ("X_REFRESH_TOKEN", refresh_token),
+        ]
+        if not value
+    ]
+    if missing:
+        raise XTokenPersistenceError(
+            f"Secrets Manager secret {secret_id} is missing required X token values: "
+            + ", ".join(missing)
+        )
+
+    return XStoredTokens(
+        access_token=str(access_token),
+        refresh_token=str(refresh_token),
+    )
+
+
 def _update_x_tokens_in_secrets_manager(
     *, secret_id: str, access_token: str, refresh_token: str
 ) -> None:
@@ -369,6 +408,22 @@ def _update_x_tokens_in_secrets_manager(
 def _update_x_tokens_in_secret(
     *, client, secret_id: str, access_token: str, refresh_token: str
 ) -> None:
+    secret_payload = _read_secret_payload(client=client, secret_id=secret_id)
+    secret_payload["X_ACCESS_TOKEN"] = access_token
+    secret_payload["X_REFRESH_TOKEN"] = refresh_token
+
+    try:
+        client.put_secret_value(
+            SecretId=secret_id,
+            SecretString=json.dumps(secret_payload),
+        )
+    except Exception as exc:
+        raise XTokenPersistenceError(
+            f"Could not update X tokens in Secrets Manager secret {secret_id}: {exc}"
+        ) from exc
+
+
+def _read_secret_payload(*, client, secret_id: str) -> dict:
     try:
         response = client.get_secret_value(SecretId=secret_id)
     except Exception as exc:
@@ -394,15 +449,4 @@ def _update_x_tokens_in_secret(
             f"Secrets Manager secret {secret_id} must contain a JSON object."
         )
 
-    secret_payload["X_ACCESS_TOKEN"] = access_token
-    secret_payload["X_REFRESH_TOKEN"] = refresh_token
-
-    try:
-        client.put_secret_value(
-            SecretId=secret_id,
-            SecretString=json.dumps(secret_payload),
-        )
-    except Exception as exc:
-        raise XTokenPersistenceError(
-            f"Could not update X tokens in Secrets Manager secret {secret_id}: {exc}"
-        ) from exc
+    return secret_payload

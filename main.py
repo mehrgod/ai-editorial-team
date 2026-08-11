@@ -28,6 +28,9 @@ def main() -> None:
     from ai_editorial_team.infrastructure.image_generation.openai_image_generator import (
         OpenAIImageGenerator,
     )
+    from ai_editorial_team.infrastructure.image_generation.template_image_renderer import (
+        TemplateImageRenderer,
+    )
     from ai_editorial_team.infrastructure.image_storage.s3_image_storage import (
         S3ImageStorageError,
         create_s3_image_storage_from_env,
@@ -83,6 +86,7 @@ def main() -> None:
                 client=openai_bundle.client,
                 model=openai_bundle.image_model,
             ),
+            template_image_renderer=TemplateImageRenderer(),
             image_storage=create_s3_image_storage_from_env(),
             instagram_publisher=create_instagram_publisher_from_env(),
             x_publisher=create_x_publisher_from_env(),

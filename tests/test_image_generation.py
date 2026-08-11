@@ -6,6 +6,11 @@ from ai_editorial_team.infrastructure.image_generation.openai_image_generator im
     OpenAIImageGenerator,
     save_image_bytes,
 )
+from ai_editorial_team.infrastructure.image_generation.template_image_renderer import (
+    TemplateImageRenderer,
+)
+
+from PIL import Image
 
 
 class EditorialImageGenerationTests(unittest.TestCase):
@@ -59,3 +64,40 @@ class OpenAIImageGeneratorTests(unittest.TestCase):
                 result["file_path"],
                 str(Path(temp_dir) / "editorial_20260729T120000000000Z.png"),
             )
+
+
+class TemplateImageRendererTests(unittest.TestCase):
+    def test_template_renderer_writes_square_png_without_openai(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            renderer = TemplateImageRenderer(
+                output_dir=Path(temp_dir),
+                timestamp_factory=lambda: "20260729T120000000000Z",
+            )
+
+            result = renderer.render(
+                {
+                    "rank": 2,
+                    "story": {
+                        "domain": "Artificial Intelligence",
+                        "headline": "AI headline",
+                        "summary": "AI summary",
+                        "reason": "AI reason",
+                    },
+                    "editorial_reason": "Editorial reason",
+                    "instagram_content": {"caption": "Caption"},
+                    "image_prompt": {"image_prompt": "Prompt"},
+                    "generated_image": {"file_path": ""},
+                    "stored_image": {"object_key": "", "public_url": ""},
+                }
+            )
+
+            file_path = Path(result["file_path"])
+            self.assertEqual(
+                file_path,
+                Path(temp_dir) / "template_rank_2_20260729T120000000000Z.png",
+            )
+            self.assertTrue(file_path.is_file())
+
+            with Image.open(file_path) as image:
+                self.assertEqual(image.size, (1024, 1024))
+                self.assertEqual(image.format, "PNG")

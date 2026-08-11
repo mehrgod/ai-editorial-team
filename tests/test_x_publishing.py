@@ -14,6 +14,7 @@ from ai_editorial_team.infrastructure.publishing.x_publisher import (
     XTokenRefreshResult,
     create_x_publisher_from_env,
     _refresh_x_oauth_token,
+    _read_x_tokens_from_secret,
     _update_x_tokens_in_secret,
 )
 
@@ -213,11 +214,43 @@ class XPublishingTests(unittest.TestCase):
         self.assertEqual(updated_secret["X_ACCESS_TOKEN"], "fresh-access-token")
         self.assertEqual(updated_secret["X_REFRESH_TOKEN"], "rotated-refresh-token")
 
+    def test_secret_read_returns_current_x_tokens(self):
+        client = RecordingSecretsManagerClient(
+            {
+                "OPENAI_API_KEY": "keep-me",
+                "X_ACCESS_TOKEN": "current-access-token",
+                "X_REFRESH_TOKEN": "current-refresh-token",
+            }
+        )
+
+        tokens = _read_x_tokens_from_secret(
+            client=client,
+            secret_id="ai-editorial-team/prod",
+        )
+
+        self.assertEqual(client.get_calls, ["ai-editorial-team/prod"])
+        self.assertEqual(tokens.access_token, "current-access-token")
+        self.assertEqual(tokens.refresh_token, "current-refresh-token")
+
     def test_factory_keeps_existing_refresh_token_when_x_does_not_rotate_it(self):
         persisted = {}
+        captured = {}
 
         def fake_refresh(config):
+            captured["refresh_config"] = config
             return XTokenRefreshResult(access_token="fresh-access-token")
+
+        def fake_read(secret_id):
+            captured["read_secret_id"] = secret_id
+            return _read_x_tokens_from_secret(
+                client=RecordingSecretsManagerClient(
+                    {
+                        "X_ACCESS_TOKEN": "current-access-token",
+                        "X_REFRESH_TOKEN": "current-refresh-token",
+                    }
+                ),
+                secret_id=secret_id,
+            )
 
         def fake_update(secret_id: str, access_token: str, refresh_token: str) -> None:
             persisted["secret_id"] = secret_id
@@ -227,11 +260,13 @@ class XPublishingTests(unittest.TestCase):
         with patch.dict(
             os.environ,
             {
-                "X_ACCESS_TOKEN": "old-access-token",
-                "X_REFRESH_TOKEN": "old-refresh-token",
                 "X_CLIENT_ID": "client-id",
                 "X_CLIENT_SECRET": "client-secret",
             },
+        ), patch(
+            "ai_editorial_team.infrastructure.publishing.x_publisher."
+            "_read_x_tokens_from_secrets_manager",
+            fake_read,
         ), patch(
             "ai_editorial_team.infrastructure.publishing.x_publisher."
             "_refresh_x_oauth_token",
@@ -243,9 +278,14 @@ class XPublishingTests(unittest.TestCase):
         ):
             publisher = create_x_publisher_from_env()
 
+        self.assertEqual(captured["read_secret_id"], "ai-editorial-team/prod")
+        self.assertEqual(
+            captured["refresh_config"].refresh_token,
+            "current-refresh-token",
+        )
         self.assertEqual(persisted["secret_id"], "ai-editorial-team/prod")
         self.assertEqual(persisted["access_token"], "fresh-access-token")
-        self.assertEqual(persisted["refresh_token"], "old-refresh-token")
+        self.assertEqual(persisted["refresh_token"], "current-refresh-token")
         self.assertEqual(
             publisher.api.config.user_access_token,
             "fresh-access-token",
@@ -263,10 +303,10 @@ def _create_image_files(temp_dir: str) -> list[str]:
 
 def _x_config() -> XPublishingConfig:
     return XPublishingConfig(
-        user_access_token="old-access-token",
-        refresh_token="old-refresh-token",
         client_id="client-id",
         client_secret="client-secret",
+        user_access_token="old-access-token",
+        refresh_token="old-refresh-token",
     )
 
 

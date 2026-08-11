@@ -21,6 +21,7 @@ from ai_editorial_team.domain.ports import (
     InstagramContentAgent,
     ResearchAgent,
     SocialPublisher,
+    TemplateImageRenderer,
     XContentAgent,
 )
 
@@ -65,6 +66,7 @@ class EditorialWorkflow:
     instagram_content_agent: InstagramContentAgent
     image_prompt_agent: ImagePromptAgent
     image_generator: ImageGenerator
+    template_image_renderer: TemplateImageRenderer
     image_storage: ImageStorage
     instagram_publisher: SocialPublisher
     x_publisher: SocialPublisher
@@ -179,13 +181,21 @@ class EditorialWorkflow:
                     "editorial_reason": story_content["editorial_reason"],
                     "instagram_content": story_content["instagram_content"],
                     "image_prompt": story_content["image_prompt"],
-                    "generated_image": self.image_generator.generate(
-                        story_content["image_prompt"]["image_prompt"]
-                    ),
+                    "generated_image": self._generate_story_image(story_content),
                 }
                 for story_content in state["instagram_story_contents"]
             ]
         }
+
+    def _generate_story_image(
+        self, story_content: InstagramStoryContent
+    ) -> dict:
+        if story_content["rank"] == 1:
+            return self.image_generator.generate(
+                story_content["image_prompt"]["image_prompt"]
+            )
+
+        return self.template_image_renderer.render(story_content)
 
     def _s3_image_storage_node(self, state: EditorialGraphState) -> dict:
         return {

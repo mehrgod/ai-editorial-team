@@ -78,6 +78,19 @@ class RecordingImageGenerator:
         return {"file_path": f"output/images/generated_{len(self.received_prompts)}.png"}
 
 
+class RecordingTemplateImageRenderer:
+    def __init__(self) -> None:
+        self.received_story_contents = []
+
+    def render(self, story_content):
+        self.received_story_contents.append(story_content)
+        return {
+            "file_path": (
+                f"output/images/template_rank_{story_content['rank']}.png"
+            )
+        }
+
+
 class RecordingImageStorage:
     def __init__(self) -> None:
         self.received_file_paths = []
@@ -142,6 +155,7 @@ class EditorialRankingWorkflowTests(unittest.TestCase):
         self.x_content_agent = RecordingXContentAgent()
         self.image_prompt_agent = RecordingImagePromptAgent()
         self.image_generator = RecordingImageGenerator()
+        self.template_image_renderer = RecordingTemplateImageRenderer()
         self.image_storage = RecordingImageStorage()
         self.instagram_publisher = RecordingInstagramPublisher()
         self.x_publisher = RecordingXPublisher()
@@ -154,6 +168,7 @@ class EditorialRankingWorkflowTests(unittest.TestCase):
             instagram_content_agent=self.instagram_content_agent,
             image_prompt_agent=self.image_prompt_agent,
             image_generator=self.image_generator,
+            template_image_renderer=self.template_image_renderer,
             image_storage=self.image_storage,
             instagram_publisher=self.instagram_publisher,
             x_publisher=self.x_publisher,
@@ -294,17 +309,32 @@ class EditorialRankingWorkflowTests(unittest.TestCase):
             {"Finance headline", "AI headline", "Sports headline"},
         )
 
-    def test_image_generator_is_called_once_for_each_image_prompt_in_order(self):
+    def test_ai_image_generator_is_called_only_for_rank_one_story(self):
         self.workflow.run()
 
-        self.assertEqual(len(self.image_generator.received_prompts), 3)
+        self.assertEqual(len(self.image_generator.received_prompts), 1)
         self.assertEqual(
             self.image_generator.received_prompts,
+            ["Image prompt for Sports headline"],
+        )
+
+    def test_template_renderer_is_called_for_rank_two_and_three_stories(self):
+        self.workflow.run()
+
+        self.assertEqual(len(self.template_image_renderer.received_story_contents), 2)
+        self.assertEqual(
             [
-                "Image prompt for Sports headline",
-                "Image prompt for AI headline",
-                "Image prompt for Finance headline",
+                story_content["rank"]
+                for story_content in self.template_image_renderer.received_story_contents
             ],
+            [2, 3],
+        )
+        self.assertEqual(
+            [
+                story_content["story"]["headline"]
+                for story_content in self.template_image_renderer.received_story_contents
+            ],
+            ["AI headline", "Finance headline"],
         )
 
     def test_every_ranked_story_has_generated_image_with_no_duplicates_or_drops(self):
@@ -322,8 +352,8 @@ class EditorialRankingWorkflowTests(unittest.TestCase):
             ],
             [
                 "output/images/generated_1.png",
-                "output/images/generated_2.png",
-                "output/images/generated_3.png",
+                "output/images/template_rank_2.png",
+                "output/images/template_rank_3.png",
             ],
         )
         self.assertEqual(
@@ -342,8 +372,8 @@ class EditorialRankingWorkflowTests(unittest.TestCase):
             self.image_storage.received_file_paths,
             [
                 "output/images/generated_1.png",
-                "output/images/generated_2.png",
-                "output/images/generated_3.png",
+                "output/images/template_rank_2.png",
+                "output/images/template_rank_3.png",
             ],
         )
 
@@ -448,8 +478,8 @@ class EditorialRankingWorkflowTests(unittest.TestCase):
                 ),
                 "image_paths": [
                     "output/images/generated_1.png",
-                    "output/images/generated_2.png",
-                    "output/images/generated_3.png",
+                    "output/images/template_rank_2.png",
+                    "output/images/template_rank_3.png",
                 ],
             },
         )
@@ -489,7 +519,7 @@ class EditorialRankingWorkflowTests(unittest.TestCase):
         self.assertIn("Domain: Artificial Intelligence", rendered_output)
         self.assertIn("Instagram Caption: Caption for AI headline", rendered_output)
         self.assertIn("Image Prompt: Image prompt for AI headline", rendered_output)
-        self.assertIn("Generated Image: output/images/generated_2.png", rendered_output)
+        self.assertIn("Generated Image: output/images/template_rank_2.png", rendered_output)
         self.assertIn("S3 Object Key: images/generated_2.png", rendered_output)
         self.assertIn(
             "Presigned Image URL: https://example.com/generated_2.png",
@@ -499,7 +529,7 @@ class EditorialRankingWorkflowTests(unittest.TestCase):
         self.assertIn("Domain: Finance", rendered_output)
         self.assertIn("Instagram Caption: Caption for Finance headline", rendered_output)
         self.assertIn("Image Prompt: Image prompt for Finance headline", rendered_output)
-        self.assertIn("Generated Image: output/images/generated_3.png", rendered_output)
+        self.assertIn("Generated Image: output/images/template_rank_3.png", rendered_output)
         self.assertIn("S3 Object Key: images/generated_3.png", rendered_output)
         self.assertIn(
             "Presigned Image URL: https://example.com/generated_3.png",

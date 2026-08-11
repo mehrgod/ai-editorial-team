@@ -3,6 +3,7 @@ from typing import List, Protocol, runtime_checkable
 from ai_editorial_team.domain.models import (
     GeneratedImage,
     ImagePrompt,
+    InstagramStoryContent,
     InstagramContent,
     PublicationRequest,
     PublicationResult,
@@ -52,6 +53,13 @@ class ImageGenerator(Protocol):
     """Interface for services that generate and store final images."""
 
     def generate(self, image_prompt: str) -> GeneratedImage:
+        ...
+
+
+class TemplateImageRenderer(Protocol):
+    """Interface for rendering local template images for ranked stories."""
+
+    def render(self, story_content: InstagramStoryContent) -> GeneratedImage:
         ...
 
 
