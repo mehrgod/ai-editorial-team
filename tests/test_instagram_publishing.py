@@ -3,6 +3,7 @@ import unittest
 from ai_editorial_team.domain.ports import SocialPublisher
 from ai_editorial_team.infrastructure.publishing.instagram_publisher import (
     InstagramMediaContainerError,
+    InstagramPublishingError,
     InstagramPublisher,
 )
 
@@ -57,6 +58,34 @@ class ExplodingInstagramGraphApi:
         raise AssertionError("should not be called")
 
 
+class SlowInstagramGraphApi(FakeInstagramGraphApi):
+    def __init__(self) -> None:
+        super().__init__()
+        self._status_by_container = {
+            "child-1": ["IN_PROGRESS", "FINISHED"],
+            "child-2": ["FINISHED"],
+            "child-3": ["FINISHED"],
+            "parent-123": ["IN_PROGRESS", "IN_PROGRESS", "FINISHED"],
+        }
+
+    def fetch_container_status(self, container_id: str) -> str:
+        self.status_calls.append(container_id)
+        statuses = self._status_by_container[container_id]
+        if len(statuses) > 1:
+            return statuses.pop(0)
+        return statuses[0]
+
+
+class PublishRaceInstagramGraphApi(FakeInstagramGraphApi):
+    def publish_media_container(self, container_id: str) -> str:
+        self.publish_calls.append(container_id)
+        if len(self.publish_calls) == 1:
+            raise InstagramPublishingError(
+                "Instagram Graph API request failed (400): Media ID is not available"
+            )
+        return "publication-456"
+
+
 class InstagramPublishingTests(unittest.TestCase):
     def test_instagram_publisher_conforms_to_social_publisher_port(self):
         publisher = InstagramPublisher(api=FakeInstagramGraphApi())
@@ -109,6 +138,57 @@ class InstagramPublishingTests(unittest.TestCase):
                 "publication_url": "https://instagram.com/p/publication-456",
             },
         )
+
+    def test_publisher_waits_until_child_and_parent_containers_are_finished(self):
+        api = SlowInstagramGraphApi()
+        publisher = InstagramPublisher(api=api, status_delay_seconds=0)
+
+        publisher.publish(
+            {
+                "caption": "A polished Instagram caption.",
+                "image_urls": [
+                    "https://example.com/rank-1.png",
+                    "https://example.com/rank-2.png",
+                    "https://example.com/rank-3.png",
+                ],
+            }
+        )
+
+        self.assertEqual(
+            api.status_calls,
+            [
+                "child-1",
+                "child-1",
+                "child-2",
+                "child-3",
+                "parent-123",
+                "parent-123",
+                "parent-123",
+            ],
+        )
+        self.assertEqual(api.publish_calls, ["parent-123"])
+
+    def test_media_id_not_available_publish_error_is_retried_once(self):
+        api = PublishRaceInstagramGraphApi()
+        publisher = InstagramPublisher(api=api)
+
+        with unittest.mock.patch(
+            "ai_editorial_team.infrastructure.publishing.instagram_publisher."
+            "time.sleep"
+        ):
+            result = publisher.publish(
+                {
+                    "caption": "A polished Instagram caption.",
+                    "image_urls": [
+                        "https://example.com/rank-1.png",
+                        "https://example.com/rank-2.png",
+                        "https://example.com/rank-3.png",
+                    ],
+                }
+            )
+
+        self.assertEqual(api.publish_calls, ["parent-123", "parent-123"])
+        self.assertEqual(result["publication_id"], "publication-456")
 
     def test_api_failures_produce_clear_infrastructure_error(self):
         publisher = InstagramPublisher(api=ExplodingInstagramGraphApi())

@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 import json
+import logging
 import os
 import time
 from typing import Any, Protocol
@@ -20,8 +21,14 @@ DEFAULT_GRAPH_API_VERSION = "v24.0"
 GRAPH_API_BASE_URL = "https://graph.instagram.com"
 CONTAINER_READY_STATUS = "FINISHED"
 CONTAINER_TERMINAL_FAILURE_STATUSES = {"ERROR", "EXPIRED"}
-CONTAINER_STATUS_ATTEMPTS = 6
-CONTAINER_STATUS_DELAY_SECONDS = 5
+CONTAINER_STATUS_ATTEMPTS = 26
+CONTAINER_STATUS_DELAY_SECONDS = 12
+MEDIA_PUBLISH_ATTEMPTS = 3
+MEDIA_PUBLISH_RETRY_DELAY_SECONDS = 10
+MEDIA_ID_NOT_AVAILABLE_MESSAGE = "Media ID is not available"
+
+
+logger = logging.getLogger(__name__)
 
 
 class InstagramPublishingError(RuntimeError):
@@ -306,14 +313,7 @@ class InstagramPublisher(SocialPublisher):
 
         self._wait_until_container_ready(parent_container_id)
 
-        try:
-            publication_id = self.api.publish_media_container(parent_container_id)
-        except InstagramAuthenticationError:
-            raise
-        except InstagramPublishingError as exc:
-            raise InstagramMediaPublishError(
-                f"Instagram media publishing failed: {exc}"
-            ) from exc
+        publication_id = self._publish_ready_container(parent_container_id)
 
         try:
             publication_url = self.api.fetch_publication_url(publication_id)
@@ -342,6 +342,14 @@ class InstagramPublisher(SocialPublisher):
                     f"Instagram media container status check failed: {exc}"
                 ) from exc
 
+            logger.info(
+                "Instagram media container %s status: %s (%s/%s)",
+                container_id,
+                last_status,
+                attempt + 1,
+                self.status_attempts,
+            )
+
             if last_status == CONTAINER_READY_STATUS:
                 return
             if last_status in CONTAINER_TERMINAL_FAILURE_STATUSES:
@@ -357,6 +365,40 @@ class InstagramPublisher(SocialPublisher):
             "Instagram media container was not ready to publish after "
             f"{self.status_attempts} checks. Last status: {last_status}."
         )
+
+    def _publish_ready_container(self, container_id: str) -> str:
+        for attempt in range(MEDIA_PUBLISH_ATTEMPTS):
+            try:
+                return self.api.publish_media_container(container_id)
+            except InstagramAuthenticationError:
+                raise
+            except InstagramPublishingError as exc:
+                if (
+                    _is_media_id_not_available_error(exc)
+                    and attempt < MEDIA_PUBLISH_ATTEMPTS - 1
+                ):
+                    logger.info(
+                        "Instagram media container %s was FINISHED but not "
+                        "available to publish yet (%s/%s). Retrying in %s seconds.",
+                        container_id,
+                        attempt + 1,
+                        MEDIA_PUBLISH_ATTEMPTS,
+                        MEDIA_PUBLISH_RETRY_DELAY_SECONDS,
+                    )
+                    time.sleep(MEDIA_PUBLISH_RETRY_DELAY_SECONDS)
+                    continue
+
+                raise InstagramMediaPublishError(
+                    f"Instagram media publishing failed: {exc}"
+                ) from exc
+
+        raise InstagramMediaPublishError(
+            f"Instagram media publishing failed for container {container_id}."
+        )
+
+
+def _is_media_id_not_available_error(exc: InstagramPublishingError) -> bool:
+    return MEDIA_ID_NOT_AVAILABLE_MESSAGE in str(exc)
 
 
 def _extract_meta_error_message(body: str) -> str | None:
