@@ -1,0 +1,159 @@
+{
+    "taskDefinition": {
+        "taskDefinitionArn": "arn:aws:ecs:us-east-1:143081815581:task-definition/ai-editorial-team:6",
+        "containerDefinitions": [
+            {
+                "name": "ai-editorial-team",
+                "image": "143081815581.dkr.ecr.us-east-1.amazonaws.com/ai-editorial-team:latest",
+                "cpu": 0,
+                "portMappings": [
+                    {
+                        "containerPort": 80,
+                        "hostPort": 80,
+                        "protocol": "tcp",
+                        "name": "ai-editorial-team-80-tcp",
+                        "appProtocol": "http"
+                    }
+                ],
+                "essential": true,
+                "environment": [
+                    {
+                        "name": "LANGSMITH_TRACING",
+                        "value": "true"
+                    },
+                    {
+                        "name": "AWS_REGION",
+                        "value": "us-east-1"
+                    },
+                    {
+                        "name": "INSTAGRAM_PROFESSIONAL_ACCOUNT_ID",
+                        "value": "27630470299980555"
+                    },
+                    {
+                        "name": "LANGSMITH_WORKSPACE_ID",
+                        "value": "bf872c29-cc89-466a-ba5a-efdbbbc6e02a"
+                    },
+                    {
+                        "name": "LANGSMITH_PROJECT",
+                        "value": "ai-editorial-team-prod"
+                    },
+                    {
+                        "name": "GRAPH_API_VERSION",
+                        "value": "v24.0"
+                    },
+                    {
+                        "name": "OPENAI_MODEL",
+                        "value": "gpt-5.4-mini"
+                    },
+                    {
+                        "name": "S3_BUCKET_NAME",
+                        "value": "ai-editorial-team-images-143081815581-us-east-1-an"
+                    }
+                ],
+                "environmentFiles": [],
+                "mountPoints": [],
+                "volumesFrom": [],
+                "secrets": [
+                    {
+                        "name": "LANGSMITH_API_KEY",
+                        "valueFrom": "arn:aws:secretsmanager:us-east-1:143081815581:secret:ai-editorial-team/prod-0291Pu:LANGSMITH_API_KEY::"
+                    },
+                    {
+                        "name": "META_ACCESS_TOKEN",
+                        "valueFrom": "arn:aws:secretsmanager:us-east-1:143081815581:secret:ai-editorial-team/prod-0291Pu:META_ACCESS_TOKEN::"
+                    },
+                    {
+                        "name": "OPENAI_API_KEY",
+                        "valueFrom": "arn:aws:secretsmanager:us-east-1:143081815581:secret:ai-editorial-team/prod-0291Pu:OPENAI_API_KEY::"
+                    },
+                    {
+                        "name": "X_ACCESS_TOKEN",
+                        "valueFrom": "arn:aws:secretsmanager:us-east-1:143081815581:secret:ai-editorial-team/prod-0291Pu:X_ACCESS_TOKEN::"
+                    },
+                    {
+                        "name": "X_CLIENT_ID",
+                        "valueFrom": "arn:aws:secretsmanager:us-east-1:143081815581:secret:ai-editorial-team/prod-0291Pu:X_CLIENT_ID::"
+                    },
+                    {
+                        "name": "X_CLIENT_SECRET",
+                        "valueFrom": "arn:aws:secretsmanager:us-east-1:143081815581:secret:ai-editorial-team/prod-0291Pu:X_CLIENT_SECRET::"
+                    },
+                    {
+                        "name": "X_REFRESH_TOKEN",
+                        "valueFrom": "arn:aws:secretsmanager:us-east-1:143081815581:secret:ai-editorial-team/prod-0291Pu:X_REFRESH_TOKEN::"
+                    }
+                ],
+                "ulimits": [],
+                "logConfiguration": {
+                    "logDriver": "awslogs",
+                    "options": {
+                        "awslogs-group": "/ecs/ai-editorial-team",
+                        "awslogs-create-group": "true",
+                        "awslogs-region": "us-east-1",
+                        "awslogs-stream-prefix": "ecs"
+                    },
+                    "secretOptions": []
+                },
+                "systemControls": []
+            }
+        ],
+        "family": "ai-editorial-team",
+        "taskRoleArn": "arn:aws:iam::143081815581:role/AIEditorialTeamS3TaskPolicy",
+        "executionRoleArn": "arn:aws:iam::143081815581:role/ai-editorial-team-execution-role",
+        "networkMode": "awsvpc",
+        "revision": 6,
+        "volumes": [],
+        "status": "ACTIVE",
+        "requiresAttributes": [
+            {
+                "name": "com.amazonaws.ecs.capability.logging-driver.awslogs"
+            },
+            {
+                "name": "ecs.capability.execution-role-awslogs"
+            },
+            {
+                "name": "com.amazonaws.ecs.capability.ecr-auth"
+            },
+            {
+                "name": "com.amazonaws.ecs.capability.docker-remote-api.1.19"
+            },
+            {
+                "name": "ecs.capability.secrets.asm.environment-variables"
+            },
+            {
+                "name": "com.amazonaws.ecs.capability.task-iam-role"
+            },
+            {
+                "name": "ecs.capability.execution-role-ecr-pull"
+            },
+            {
+                "name": "com.amazonaws.ecs.capability.docker-remote-api.1.18"
+            },
+            {
+                "name": "ecs.capability.task-eni"
+            },
+            {
+                "name": "com.amazonaws.ecs.capability.docker-remote-api.1.29"
+            }
+        ],
+        "placementConstraints": [],
+        "compatibilities": [
+            "EC2",
+            "MANAGED_INSTANCES",
+            "FARGATE"
+        ],
+        "runtimePlatform": {
+            "cpuArchitecture": "X86_64",
+            "operatingSystemFamily": "LINUX"
+        },
+        "requiresCompatibilities": [
+            "FARGATE"
+        ],
+        "cpu": "512",
+        "memory": "1024",
+        "registeredAt": "2026-08-13T22:00:49.420000-04:00",
+        "registeredBy": "arn:aws:iam::143081815581:root",
+        "enableFaultInjection": false
+    },
+    "tags": []
+}
