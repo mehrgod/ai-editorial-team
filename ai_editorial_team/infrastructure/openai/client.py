@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 
+from langsmith.wrappers import wrap_openai
 from openai import OpenAI
 
 from ai_editorial_team.infrastructure.openai.config import OpenAIConfig
@@ -10,6 +11,7 @@ class OpenAIClientBundle:
     """Configured OpenAI SDK client and model shared by OpenAI-backed agents."""
 
     client: OpenAI
+    image_client: OpenAI
     model: str
     image_model: str
 
@@ -18,7 +20,8 @@ def create_openai_client_bundle(
     config: OpenAIConfig,
 ) -> OpenAIClientBundle:
     return OpenAIClientBundle(
-        client=OpenAI(api_key=config.api_key),
+        client=wrap_openai(OpenAI(api_key=config.api_key)),
+        image_client=OpenAI(api_key=config.api_key),
         model=config.model,
         image_model=config.image_model,
     )

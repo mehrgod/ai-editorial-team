@@ -59,6 +59,7 @@ def main() -> None:
         XPublishingError,
         create_x_publisher_from_env,
     )
+    from langchain_core.tracers.langchain import wait_for_all_tracers
 
     try:
         openai_bundle = create_openai_client_bundle_from_env()
@@ -83,7 +84,7 @@ def main() -> None:
                 model=openai_bundle.model,
             ),
             image_generator=OpenAIImageGenerator(
-                client=openai_bundle.client,
+                client=openai_bundle.image_client,
                 model=openai_bundle.image_model,
             ),
             template_image_renderer=TemplateImageRenderer(),
@@ -100,6 +101,8 @@ def main() -> None:
         XPublishingError,
     ) as exc:
         raise SystemExit(f"Error: {exc}")
+    finally:
+        wait_for_all_tracers()
 
 
 if __name__ == "__main__":
