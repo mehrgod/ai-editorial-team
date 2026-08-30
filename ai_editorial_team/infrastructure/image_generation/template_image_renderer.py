@@ -84,30 +84,19 @@ class TemplateImageRenderer(TemplateImageRendererPort):
         accent_color: tuple[int, int, int],
     ) -> None:
         story = story_content["story"]
-        rank = story_content["rank"]
         left = CARD_MARGIN + 58
         right = IMAGE_SIZE - CARD_MARGIN - 58
         y = CARD_MARGIN + 58
 
-        rank_font = _font(34, bold=True)
         label_font = _font(30, bold=True)
         headline_font = _font(58, bold=True)
         summary_font = _font(34)
         footer_font = _font(26)
 
-        rank_label = f"RANK {rank}"
-        rank_width = _text_width(draw, rank_label, rank_font)
-        draw.rounded_rectangle(
-            (left, y, left + rank_width + 42, y + 58),
-            radius=24,
-            fill=accent_color,
-        )
-        draw.text((left + 21, y + 11), rank_label, fill=(255, 255, 255), font=rank_font)
-
         domain = story["domain"].upper()
-        draw.text((left, y + 92), domain, fill=accent_color, font=label_font)
+        draw.text((left, y), domain, fill=accent_color, font=label_font)
 
-        y += 160
+        y += 68
         headline_lines = _wrap_text(draw, story["headline"], headline_font, right - left)
         for line in headline_lines[:5]:
             draw.text((left, y), line, fill=(15, 23, 42), font=headline_font)

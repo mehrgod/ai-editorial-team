@@ -1,6 +1,7 @@
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from ai_editorial_team.infrastructure.image_generation.openai_image_generator import (
     OpenAIImageGenerator,
@@ -67,6 +68,57 @@ class OpenAIImageGeneratorTests(unittest.TestCase):
 
 
 class TemplateImageRendererTests(unittest.TestCase):
+    def test_template_renderer_does_not_draw_visible_rank_label(self):
+        class RecordingDraw:
+            def __init__(self):
+                self.text_values = []
+
+            def rectangle(self, *args, **kwargs):
+                pass
+
+            def rounded_rectangle(self, *args, **kwargs):
+                pass
+
+            def line(self, *args, **kwargs):
+                pass
+
+            def text(self, xy, text, **kwargs):
+                self.text_values.append(text)
+
+            def textbbox(self, xy, text, font=None):
+                return (0, 0, len(text) * 20, 40)
+
+        draw = RecordingDraw()
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            renderer = TemplateImageRenderer(
+                output_dir=Path(temp_dir),
+                timestamp_factory=lambda: "20260729T120000000000Z",
+            )
+
+            with patch(
+                "ai_editorial_team.infrastructure.image_generation.template_image_renderer.ImageDraw.Draw",
+                return_value=draw,
+            ):
+                renderer.render(
+                    {
+                        "rank": 2,
+                        "story": {
+                            "domain": "Artificial Intelligence",
+                            "headline": "AI headline",
+                            "summary": "AI summary",
+                            "reason": "AI reason",
+                        },
+                        "editorial_reason": "Editorial reason",
+                        "instagram_content": {"caption": "Caption"},
+                        "image_prompt": {"image_prompt": "Prompt"},
+                        "generated_image": {"file_path": ""},
+                        "stored_image": {"object_key": "", "public_url": ""},
+                    }
+                )
+
+        self.assertNotIn("RANK 2", draw.text_values)
+
     def test_template_renderer_writes_square_png_without_openai(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             renderer = TemplateImageRenderer(
