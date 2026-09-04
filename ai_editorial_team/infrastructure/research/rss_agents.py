@@ -8,7 +8,7 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 import xml.etree.ElementTree as ET
 
-from ai_editorial_team.domain.models import Story
+from ai_editorial_team.domain.models import MISSING_RSS_SUMMARY, Story
 from ai_editorial_team.domain.ports import ResearchAgent
 
 
@@ -57,8 +57,7 @@ class RssResearchAgent:
             "headline": article.title,
             "summary": article.summary,
             "reason": (
-                f"Selected as the most recent article from "
-                f"{article.source_name}."
+                f"Selected as the most recent article from " f"{article.source_name}."
             ),
         }
 
@@ -257,7 +256,7 @@ def _build_article(
 
     return RssArticle(
         title=title,
-        summary=summary or "No summary provided by the RSS feed.",
+        summary=summary or MISSING_RSS_SUMMARY,
         published_at=_parse_datetime(published),
         source_name=source_name,
     )

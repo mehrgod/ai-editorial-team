@@ -7,7 +7,9 @@ from typing import Callable
 from PIL import Image, ImageDraw, ImageFont
 
 from ai_editorial_team.domain.models import GeneratedImage, InstagramStoryContent
-from ai_editorial_team.domain.ports import TemplateImageRenderer as TemplateImageRendererPort
+from ai_editorial_team.domain.ports import (
+    TemplateImageRenderer as TemplateImageRendererPort,
+)
 from ai_editorial_team.infrastructure.image_generation.openai_image_generator import (
     IMAGE_OUTPUT_DIRECTORY,
     OpenAIImageGenerationError,
@@ -48,8 +50,7 @@ class TemplateImageRenderer(TemplateImageRendererPort):
         self._draw_content(draw, story_content, accent_color)
 
         file_path = (
-            self.output_dir
-            / f"template_rank_{rank}_{self.timestamp_factory()}.png"
+            self.output_dir / f"template_rank_{rank}_{self.timestamp_factory()}.png"
         )
         try:
             self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -61,7 +62,9 @@ class TemplateImageRenderer(TemplateImageRendererPort):
 
         return {"file_path": str(file_path)}
 
-    def _draw_background(self, draw: ImageDraw.ImageDraw, accent_color: tuple[int, int, int]) -> None:
+    def _draw_background(
+        self, draw: ImageDraw.ImageDraw, accent_color: tuple[int, int, int]
+    ) -> None:
         draw.rectangle((0, 0, IMAGE_SIZE, 26), fill=accent_color)
         draw.rectangle((0, IMAGE_SIZE - 26, IMAGE_SIZE, IMAGE_SIZE), fill=accent_color)
         draw.rounded_rectangle(
@@ -97,7 +100,9 @@ class TemplateImageRenderer(TemplateImageRendererPort):
         draw.text((left, y), domain, fill=accent_color, font=label_font)
 
         y += 68
-        headline_lines = _wrap_text(draw, story["headline"], headline_font, right - left)
+        headline_lines = _wrap_text(
+            draw, story["headline"], headline_font, right - left
+        )
         for line in headline_lines[:5]:
             draw.text((left, y), line, fill=(15, 23, 42), font=headline_font)
             y += 66
@@ -110,7 +115,12 @@ class TemplateImageRenderer(TemplateImageRendererPort):
             y += 46
 
         draw.line(
-            (left, IMAGE_SIZE - CARD_MARGIN - 110, right, IMAGE_SIZE - CARD_MARGIN - 110),
+            (
+                left,
+                IMAGE_SIZE - CARD_MARGIN - 110,
+                right,
+                IMAGE_SIZE - CARD_MARGIN - 110,
+            ),
             fill=(203, 213, 225),
             width=2,
         )

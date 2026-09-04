@@ -8,6 +8,7 @@ from typing_extensions import Annotated, TypedDict
 from ai_editorial_team.domain.models import (
     EditorialPackage,
     InstagramStoryContent,
+    MISSING_RSS_SUMMARY,
     PublicationResult,
     RankedStory,
     Story,
@@ -21,6 +22,7 @@ from ai_editorial_team.domain.ports import (
     InstagramContentAgent,
     ResearchAgent,
     SocialPublisher,
+    StorySummaryAgent,
     TemplateImageRenderer,
     XContentAgent,
 )
@@ -61,6 +63,7 @@ class EditorialWorkflow:
     finance_research_agent: ResearchAgent
     ai_research_agent: ResearchAgent
     sports_research_agent: ResearchAgent
+    story_summary_agent: StorySummaryAgent
     chief_editor: ChiefEditor
     x_content_agent: XContentAgent
     instagram_content_agent: InstagramContentAgent
@@ -84,13 +87,9 @@ class EditorialWorkflow:
     def _build_graph(self):
         graph = StateGraph(EditorialGraphState)
 
-        graph.add_node(
-            FINANCE_NODE, self._research_node(self.finance_research_agent)
-        )
+        graph.add_node(FINANCE_NODE, self._research_node(self.finance_research_agent))
         graph.add_node(AI_NODE, self._research_node(self.ai_research_agent))
-        graph.add_node(
-            SPORTS_NODE, self._research_node(self.sports_research_agent)
-        )
+        graph.add_node(SPORTS_NODE, self._research_node(self.sports_research_agent))
         graph.add_node(EDITOR_NODE, self._chief_editor_node)
         graph.add_node(X_CONTENT_NODE, self._x_content_node)
         graph.add_node(INSTAGRAM_NODE, self._instagram_content_node)
@@ -118,19 +117,28 @@ class EditorialWorkflow:
 
         return graph.compile()
 
-    @staticmethod
     def _research_node(
+        self,
         research_agent: ResearchAgent,
     ) -> Callable[[EditorialGraphState], ResearchNodeResult]:
         def node(_: EditorialGraphState) -> ResearchNodeResult:
-            return {"stories": [research_agent.research()]}
+            return {"stories": [self._summarize_if_needed(research_agent.research())]}
 
         return node
 
-    def _chief_editor_node(self, state: EditorialGraphState) -> dict:
+    def _summarize_if_needed(self, story: Story) -> Story:
+        if story["summary"].strip() and story["summary"] != MISSING_RSS_SUMMARY:
+            return story
+
         return {
-            "ranked_stories": self.chief_editor.rank_stories(state["stories"])
+            "domain": story["domain"],
+            "headline": story["headline"],
+            "summary": self.story_summary_agent.summarize_story(story),
+            "reason": story["reason"],
         }
+
+    def _chief_editor_node(self, state: EditorialGraphState) -> dict:
+        return {"ranked_stories": self.chief_editor.rank_stories(state["stories"])}
 
     def _x_content_node(self, state: EditorialGraphState) -> dict:
         ranked_stories = state["ranked_stories"]
@@ -187,9 +195,7 @@ class EditorialWorkflow:
             ]
         }
 
-    def _generate_story_image(
-        self, story_content: InstagramStoryContent
-    ) -> dict:
+    def _generate_story_image(self, story_content: InstagramStoryContent) -> dict:
         if story_content["rank"] == 1:
             return self.image_generator.generate(
                 story_content["image_prompt"]["image_prompt"]
@@ -253,8 +259,7 @@ def _build_carousel_caption(
     story_contents: List[InstagramStoryContent],
 ) -> str:
     return "\n\n".join(
-        f"{story_content['rank']}. "
-        f"{story_content['instagram_content']['caption']}"
+        f"{story_content['rank']}. " f"{story_content['instagram_content']['caption']}"
         for story_content in story_contents
     )
 
@@ -302,9 +307,7 @@ def _validate_x_publication_inputs(
 
     ranks = [story_content["rank"] for story_content in story_contents]
     if ranks != [1, 2, 3]:
-        raise ValueError(
-            "X publishing requires story items ordered by rank 1, 2, 3."
-        )
+        raise ValueError("X publishing requires story items ordered by rank 1, 2, 3.")
 
     for story_content in story_contents:
         if not story_content["generated_image"]["file_path"]:

@@ -3,6 +3,9 @@ from typing import List
 from typing_extensions import NotRequired, TypedDict
 
 
+MISSING_RSS_SUMMARY = "No summary provided by the RSS feed."
+
+
 class Story(TypedDict):
     domain: str
     headline: str

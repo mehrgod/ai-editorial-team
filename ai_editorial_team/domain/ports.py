@@ -21,6 +21,13 @@ class ResearchAgent(Protocol):
         ...
 
 
+class StorySummaryAgent(Protocol):
+    """Interface for agents that write missing story summaries."""
+
+    def summarize_story(self, story: Story) -> str:
+        ...
+
+
 class ChiefEditor(Protocol):
     """Interface for the agent that ranks candidate stories."""
 

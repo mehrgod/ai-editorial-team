@@ -22,6 +22,9 @@ def main() -> None:
     from ai_editorial_team.infrastructure.content.openai_image_prompt_agent import (
         ImagePromptAgent,
     )
+    from ai_editorial_team.infrastructure.content.openai_story_summary_agent import (
+        StorySummaryAgent,
+    )
     from ai_editorial_team.infrastructure.content.openai_x_content_agent import (
         XContentAgent,
     )
@@ -67,6 +70,10 @@ def main() -> None:
             finance_research_agent=create_finance_research_agent(),
             ai_research_agent=create_ai_research_agent(),
             sports_research_agent=create_sports_research_agent(),
+            story_summary_agent=StorySummaryAgent(
+                client=openai_bundle.client,
+                model=openai_bundle.model,
+            ),
             chief_editor=LLMChiefEditor(
                 client=openai_bundle.client,
                 model=openai_bundle.model,

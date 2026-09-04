@@ -3,7 +3,7 @@ import unittest
 from contextlib import redirect_stdout
 
 from ai_editorial_team.application.workflow import EditorialWorkflow
-from ai_editorial_team.domain.models import Story
+from ai_editorial_team.domain.models import MISSING_RSS_SUMMARY, Story
 from ai_editorial_team.presentation.cli import run_cli
 
 
@@ -37,6 +37,15 @@ class RecordingChiefEditor:
         ]
 
 
+class RecordingStorySummaryAgent:
+    def __init__(self) -> None:
+        self.received_stories = []
+
+    def summarize_story(self, story: Story):
+        self.received_stories.append(story)
+        return f"Generated summary for {story['headline']}"
+
+
 class RecordingInstagramContentAgent:
     def __init__(self) -> None:
         self.received_stories = []
@@ -52,12 +61,7 @@ class RecordingXContentAgent:
 
     def generate_post(self, ranked_stories):
         self.received_ranked_stories.append(list(ranked_stories))
-        return {
-            "post": (
-                "1/ Sports headline 2/ AI headline "
-                "3/ Finance headline"
-            )
-        }
+        return {"post": ("1/ Sports headline 2/ AI headline " "3/ Finance headline")}
 
 
 class RecordingImagePromptAgent:
@@ -75,7 +79,9 @@ class RecordingImageGenerator:
 
     def generate(self, image_prompt: str):
         self.received_prompts.append(image_prompt)
-        return {"file_path": f"output/images/generated_{len(self.received_prompts)}.png"}
+        return {
+            "file_path": f"output/images/generated_{len(self.received_prompts)}.png"
+        }
 
 
 class RecordingTemplateImageRenderer:
@@ -85,9 +91,7 @@ class RecordingTemplateImageRenderer:
     def render(self, story_content):
         self.received_story_contents.append(story_content)
         return {
-            "file_path": (
-                f"output/images/template_rank_{story_content['rank']}.png"
-            )
+            "file_path": (f"output/images/template_rank_{story_content['rank']}.png")
         }
 
 
@@ -150,6 +154,7 @@ class EditorialRankingWorkflowTests(unittest.TestCase):
             "summary": "Sports summary",
             "reason": "Sports reason",
         }
+        self.story_summary_agent = RecordingStorySummaryAgent()
         self.chief_editor = RecordingChiefEditor()
         self.instagram_content_agent = RecordingInstagramContentAgent()
         self.x_content_agent = RecordingXContentAgent()
@@ -163,6 +168,7 @@ class EditorialRankingWorkflowTests(unittest.TestCase):
             finance_research_agent=FakeResearchAgent(self.finance_story),
             ai_research_agent=FakeResearchAgent(self.ai_story),
             sports_research_agent=FakeResearchAgent(self.sports_story),
+            story_summary_agent=self.story_summary_agent,
             chief_editor=self.chief_editor,
             x_content_agent=self.x_content_agent,
             instagram_content_agent=self.instagram_content_agent,
@@ -179,12 +185,34 @@ class EditorialRankingWorkflowTests(unittest.TestCase):
 
         self.assertEqual(len(self.chief_editor.received_stories), 3)
         self.assertEqual(
-            {
-                story["headline"]
-                for story in self.chief_editor.received_stories
-            },
+            {story["headline"] for story in self.chief_editor.received_stories},
             {"Finance headline", "AI headline", "Sports headline"},
         )
+
+    def test_missing_rss_summary_is_generated_before_editorial_work(self):
+        self.finance_story["summary"] = MISSING_RSS_SUMMARY
+
+        self.workflow.run()
+
+        self.assertEqual(len(self.story_summary_agent.received_stories), 1)
+        self.assertEqual(
+            self.story_summary_agent.received_stories[0]["headline"],
+            "Finance headline",
+        )
+        finance_story = next(
+            story
+            for story in self.chief_editor.received_stories
+            if story["domain"] == "Finance"
+        )
+        self.assertEqual(
+            finance_story["summary"],
+            "Generated summary for Finance headline",
+        )
+
+    def test_existing_rss_summary_does_not_call_summary_agent(self):
+        self.workflow.run()
+
+        self.assertEqual(self.story_summary_agent.received_stories, [])
 
     def test_all_three_stories_are_returned_with_exact_ranks_no_duplicates(self):
         result = self.workflow.run()
@@ -196,10 +224,7 @@ class EditorialRankingWorkflowTests(unittest.TestCase):
             [1, 2, 3],
         )
         self.assertEqual(
-            {
-                ranked_story["story"]["headline"]
-                for ranked_story in ranked_stories
-            },
+            {ranked_story["story"]["headline"] for ranked_story in ranked_stories},
             {"Finance headline", "AI headline", "Sports headline"},
         )
 
@@ -225,10 +250,7 @@ class EditorialRankingWorkflowTests(unittest.TestCase):
             [1, 2, 3],
         )
         self.assertEqual(
-            [
-                ranked_story["story"]["headline"]
-                for ranked_story in ranked_stories
-            ],
+            [ranked_story["story"]["headline"] for ranked_story in ranked_stories],
             ["Sports headline", "AI headline", "Finance headline"],
         )
 
@@ -263,10 +285,7 @@ class EditorialRankingWorkflowTests(unittest.TestCase):
             ],
         )
         self.assertEqual(
-            {
-                story_content["story"]["headline"]
-                for story_content in story_contents
-            },
+            {story_content["story"]["headline"] for story_content in story_contents},
             {"Finance headline", "AI headline", "Sports headline"},
         )
 
@@ -275,10 +294,7 @@ class EditorialRankingWorkflowTests(unittest.TestCase):
 
         self.assertEqual(len(self.image_prompt_agent.received_stories), 3)
         self.assertEqual(
-            [
-                story["headline"]
-                for story in self.image_prompt_agent.received_stories
-            ],
+            [story["headline"] for story in self.image_prompt_agent.received_stories],
             ["Sports headline", "AI headline", "Finance headline"],
         )
 
@@ -302,10 +318,7 @@ class EditorialRankingWorkflowTests(unittest.TestCase):
             ],
         )
         self.assertEqual(
-            {
-                story_content["story"]["headline"]
-                for story_content in story_contents
-            },
+            {story_content["story"]["headline"] for story_content in story_contents},
             {"Finance headline", "AI headline", "Sports headline"},
         )
 
@@ -357,10 +370,7 @@ class EditorialRankingWorkflowTests(unittest.TestCase):
             ],
         )
         self.assertEqual(
-            {
-                story_content["story"]["headline"]
-                for story_content in story_contents
-            },
+            {story_content["story"]["headline"] for story_content in story_contents},
             {"Finance headline", "AI headline", "Sports headline"},
         )
 
@@ -408,10 +418,7 @@ class EditorialRankingWorkflowTests(unittest.TestCase):
             ],
         )
         self.assertEqual(
-            {
-                story_content["story"]["headline"]
-                for story_content in story_contents
-            },
+            {story_content["story"]["headline"] for story_content in story_contents},
             {"Finance headline", "AI headline", "Sports headline"},
         )
 
@@ -472,10 +479,7 @@ class EditorialRankingWorkflowTests(unittest.TestCase):
         self.assertEqual(
             self.x_publisher.received_publications[0],
             {
-                "text": (
-                    "1/ Sports headline 2/ AI headline "
-                    "3/ Finance headline"
-                ),
+                "text": ("1/ Sports headline 2/ AI headline " "3/ Finance headline"),
                 "image_paths": [
                     "output/images/generated_1.png",
                     "output/images/template_rank_2.png",
@@ -519,7 +523,9 @@ class EditorialRankingWorkflowTests(unittest.TestCase):
         self.assertIn("Domain: Artificial Intelligence", rendered_output)
         self.assertIn("Instagram Caption: Caption for AI headline", rendered_output)
         self.assertIn("Image Prompt: Image prompt for AI headline", rendered_output)
-        self.assertIn("Generated Image: output/images/template_rank_2.png", rendered_output)
+        self.assertIn(
+            "Generated Image: output/images/template_rank_2.png", rendered_output
+        )
         self.assertIn("S3 Object Key: images/generated_2.png", rendered_output)
         self.assertIn(
             "Presigned Image URL: https://example.com/generated_2.png",
@@ -527,9 +533,15 @@ class EditorialRankingWorkflowTests(unittest.TestCase):
         )
         self.assertIn("Rank 3", rendered_output)
         self.assertIn("Domain: Finance", rendered_output)
-        self.assertIn("Instagram Caption: Caption for Finance headline", rendered_output)
-        self.assertIn("Image Prompt: Image prompt for Finance headline", rendered_output)
-        self.assertIn("Generated Image: output/images/template_rank_3.png", rendered_output)
+        self.assertIn(
+            "Instagram Caption: Caption for Finance headline", rendered_output
+        )
+        self.assertIn(
+            "Image Prompt: Image prompt for Finance headline", rendered_output
+        )
+        self.assertIn(
+            "Generated Image: output/images/template_rank_3.png", rendered_output
+        )
         self.assertIn("S3 Object Key: images/generated_3.png", rendered_output)
         self.assertIn(
             "Presigned Image URL: https://example.com/generated_3.png",
