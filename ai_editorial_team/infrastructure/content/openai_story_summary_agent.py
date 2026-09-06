@@ -15,6 +15,7 @@ class OpenAIStorySummaryError(OpenAIStructuredAgentError):
 class StorySummaryResponse(BaseModel):
     summary: str = Field(
         description="A concise editorial summary for the story.",
+        min_length=1,
         max_length=280,
     )
 
@@ -32,7 +33,12 @@ class StorySummaryAgent(OpenAIStructuredAgent[StorySummaryResponse, Story, str])
         return StorySummaryResponse
 
     def to_domain_result(self, response: StorySummaryResponse, context: Story) -> str:
-        return response.summary
+        summary = response.summary.strip()
+        if summary.lower() in {"null", "none", "n/a"}:
+            raise OpenAIStorySummaryError(
+                "OpenAI story summary returned a placeholder instead of a summary."
+            )
+        return summary
 
     def error_message(self, exc: OpenAIError) -> str:
         return f"OpenAI story summary request failed: {exc}"

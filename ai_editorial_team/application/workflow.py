@@ -127,7 +127,7 @@ class EditorialWorkflow:
         return node
 
     def _summarize_if_needed(self, story: Story) -> Story:
-        if story["summary"].strip() and story["summary"] != MISSING_RSS_SUMMARY:
+        if _has_real_summary(story["summary"]):
             return story
 
         return {
@@ -253,6 +253,16 @@ class EditorialWorkflow:
                 }
             )
         }
+
+
+def _has_real_summary(summary: str) -> bool:
+    normalized = summary.strip().lower()
+    return bool(normalized) and normalized not in {
+        MISSING_RSS_SUMMARY.lower(),
+        "null",
+        "none",
+        "n/a",
+    }
 
 
 def _build_carousel_caption(

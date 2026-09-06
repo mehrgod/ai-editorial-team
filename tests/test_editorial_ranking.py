@@ -209,6 +209,22 @@ class EditorialRankingWorkflowTests(unittest.TestCase):
             "Generated summary for Finance headline",
         )
 
+    def test_null_rss_summary_is_generated_before_editorial_work(self):
+        self.finance_story["summary"] = "null"
+
+        self.workflow.run()
+
+        self.assertEqual(len(self.story_summary_agent.received_stories), 1)
+        finance_story = next(
+            story
+            for story in self.chief_editor.received_stories
+            if story["domain"] == "Finance"
+        )
+        self.assertEqual(
+            finance_story["summary"],
+            "Generated summary for Finance headline",
+        )
+
     def test_existing_rss_summary_does_not_call_summary_agent(self):
         self.workflow.run()
 

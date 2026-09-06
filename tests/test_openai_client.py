@@ -8,6 +8,11 @@ from ai_editorial_team.infrastructure.openai.config import OpenAIConfig
 from ai_editorial_team.infrastructure.openai.structured_agent import (
     OpenAIStructuredAgent,
 )
+from ai_editorial_team.infrastructure.content.openai_story_summary_agent import (
+    OpenAIStorySummaryError,
+    StorySummaryAgent,
+    StorySummaryResponse,
+)
 
 
 class OpenAIClientBundleTests(unittest.TestCase):
@@ -48,9 +53,7 @@ class ExampleResponse(BaseModel):
     value: str
 
 
-class ExampleStructuredAgent(
-    OpenAIStructuredAgent[ExampleResponse, dict, str]
-):
+class ExampleStructuredAgent(OpenAIStructuredAgent[ExampleResponse, dict, str]):
     def instructions(self) -> str:
         return "Return a value."
 
@@ -100,6 +103,31 @@ class StructuredAgentResponsesParseTests(unittest.TestCase):
         self.assertEqual(call["input"], "hello")
         self.assertIs(call["text_format"], ExampleResponse)
         self.assertFalse(call["store"])
+
+
+class StorySummaryAgentTests(unittest.TestCase):
+    def test_story_summary_agent_rejects_null_placeholder_summary(self):
+        class FakeResponses:
+            def parse(self, **kwargs):
+                class FakeParsedResponse:
+                    output_parsed = StorySummaryResponse(summary="null")
+
+                return FakeParsedResponse()
+
+        class FakeClient:
+            responses = FakeResponses()
+
+        agent = StorySummaryAgent(client=FakeClient(), model="gpt-test")
+
+        with self.assertRaises(OpenAIStorySummaryError):
+            agent.summarize_story(
+                {
+                    "domain": "Finance",
+                    "headline": "Finance headline",
+                    "summary": "null",
+                    "reason": "Finance reason",
+                }
+            )
 
 
 if __name__ == "__main__":
