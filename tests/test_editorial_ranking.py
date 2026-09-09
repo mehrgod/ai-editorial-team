@@ -338,32 +338,28 @@ class EditorialRankingWorkflowTests(unittest.TestCase):
             {"Finance headline", "AI headline", "Sports headline"},
         )
 
-    def test_ai_image_generator_is_called_only_for_rank_one_story(self):
+    def test_ai_image_generator_is_disabled(self):
         self.workflow.run()
 
-        self.assertEqual(len(self.image_generator.received_prompts), 1)
-        self.assertEqual(
-            self.image_generator.received_prompts,
-            ["Image prompt for Sports headline"],
-        )
+        self.assertEqual(self.image_generator.received_prompts, [])
 
-    def test_template_renderer_is_called_for_rank_two_and_three_stories(self):
+    def test_template_renderer_is_called_for_all_three_stories(self):
         self.workflow.run()
 
-        self.assertEqual(len(self.template_image_renderer.received_story_contents), 2)
+        self.assertEqual(len(self.template_image_renderer.received_story_contents), 3)
         self.assertEqual(
             [
                 story_content["rank"]
                 for story_content in self.template_image_renderer.received_story_contents
             ],
-            [2, 3],
+            [1, 2, 3],
         )
         self.assertEqual(
             [
                 story_content["story"]["headline"]
                 for story_content in self.template_image_renderer.received_story_contents
             ],
-            ["AI headline", "Finance headline"],
+            ["Sports headline", "AI headline", "Finance headline"],
         )
 
     def test_every_ranked_story_has_generated_image_with_no_duplicates_or_drops(self):
@@ -380,7 +376,7 @@ class EditorialRankingWorkflowTests(unittest.TestCase):
                 for story_content in story_contents
             ],
             [
-                "output/images/generated_1.png",
+                "output/images/template_rank_1.png",
                 "output/images/template_rank_2.png",
                 "output/images/template_rank_3.png",
             ],
@@ -397,7 +393,7 @@ class EditorialRankingWorkflowTests(unittest.TestCase):
         self.assertEqual(
             self.image_storage.received_file_paths,
             [
-                "output/images/generated_1.png",
+                "output/images/template_rank_1.png",
                 "output/images/template_rank_2.png",
                 "output/images/template_rank_3.png",
             ],
@@ -497,7 +493,7 @@ class EditorialRankingWorkflowTests(unittest.TestCase):
             {
                 "text": ("1/ Sports headline 2/ AI headline " "3/ Finance headline"),
                 "image_paths": [
-                    "output/images/generated_1.png",
+                    "output/images/template_rank_1.png",
                     "output/images/template_rank_2.png",
                     "output/images/template_rank_3.png",
                 ],
@@ -529,7 +525,9 @@ class EditorialRankingWorkflowTests(unittest.TestCase):
         self.assertIn("Editorial Reason: Reason 1", rendered_output)
         self.assertIn("Instagram Caption: Caption for Sports headline", rendered_output)
         self.assertIn("Image Prompt: Image prompt for Sports headline", rendered_output)
-        self.assertIn("Generated Image: output/images/generated_1.png", rendered_output)
+        self.assertIn(
+            "Generated Image: output/images/template_rank_1.png", rendered_output
+        )
         self.assertIn("S3 Object Key: images/generated_1.png", rendered_output)
         self.assertIn(
             "Presigned Image URL: https://example.com/generated_1.png",

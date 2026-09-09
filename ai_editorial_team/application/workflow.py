@@ -40,6 +40,8 @@ S3_IMAGE_STORAGE_NODE = "S3 Image Storage"
 INSTAGRAM_PUBLISHER_NODE = "Instagram Carousel Publisher"
 X_PUBLISHER_NODE = "X Publisher"
 
+AI_IMAGE_GENERATION_ENABLED = False
+
 
 class ResearchNodeResult(TypedDict):
     stories: List[Story]
@@ -196,7 +198,7 @@ class EditorialWorkflow:
         }
 
     def _generate_story_image(self, story_content: InstagramStoryContent) -> dict:
-        if story_content["rank"] == 1:
+        if AI_IMAGE_GENERATION_ENABLED and story_content["rank"] == 1:
             return self.image_generator.generate(
                 story_content["image_prompt"]["image_prompt"]
             )
