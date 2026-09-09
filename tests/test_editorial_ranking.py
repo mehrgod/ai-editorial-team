@@ -305,14 +305,10 @@ class EditorialRankingWorkflowTests(unittest.TestCase):
             {"Finance headline", "AI headline", "Sports headline"},
         )
 
-    def test_image_prompt_agent_is_called_once_for_each_ranked_story_in_order(self):
+    def test_image_prompt_agent_is_disabled_when_ai_images_are_disabled(self):
         self.workflow.run()
 
-        self.assertEqual(len(self.image_prompt_agent.received_stories), 3)
-        self.assertEqual(
-            [story["headline"] for story in self.image_prompt_agent.received_stories],
-            ["Sports headline", "AI headline", "Finance headline"],
-        )
+        self.assertEqual(self.image_prompt_agent.received_stories, [])
 
     def test_every_ranked_story_has_image_prompt_with_no_duplicates_or_drops(self):
         result = self.workflow.run()
@@ -328,9 +324,9 @@ class EditorialRankingWorkflowTests(unittest.TestCase):
                 for story_content in story_contents
             ],
             [
-                "Image prompt for Sports headline",
-                "Image prompt for AI headline",
-                "Image prompt for Finance headline",
+                "",
+                "",
+                "",
             ],
         )
         self.assertEqual(
@@ -524,7 +520,7 @@ class EditorialRankingWorkflowTests(unittest.TestCase):
         self.assertIn("Headline: Sports headline", rendered_output)
         self.assertIn("Editorial Reason: Reason 1", rendered_output)
         self.assertIn("Instagram Caption: Caption for Sports headline", rendered_output)
-        self.assertIn("Image Prompt: Image prompt for Sports headline", rendered_output)
+        self.assertIn("Image Prompt: ", rendered_output)
         self.assertIn(
             "Generated Image: output/images/template_rank_1.png", rendered_output
         )
@@ -536,7 +532,7 @@ class EditorialRankingWorkflowTests(unittest.TestCase):
         self.assertIn("Rank 2", rendered_output)
         self.assertIn("Domain: Artificial Intelligence", rendered_output)
         self.assertIn("Instagram Caption: Caption for AI headline", rendered_output)
-        self.assertIn("Image Prompt: Image prompt for AI headline", rendered_output)
+        self.assertIn("Image Prompt: ", rendered_output)
         self.assertIn(
             "Generated Image: output/images/template_rank_2.png", rendered_output
         )
@@ -550,9 +546,7 @@ class EditorialRankingWorkflowTests(unittest.TestCase):
         self.assertIn(
             "Instagram Caption: Caption for Finance headline", rendered_output
         )
-        self.assertIn(
-            "Image Prompt: Image prompt for Finance headline", rendered_output
-        )
+        self.assertIn("Image Prompt: ", rendered_output)
         self.assertIn(
             "Generated Image: output/images/template_rank_3.png", rendered_output
         )

@@ -172,15 +172,21 @@ class EditorialWorkflow:
                     "story": story_content["story"],
                     "editorial_reason": story_content["editorial_reason"],
                     "instagram_content": story_content["instagram_content"],
-                    "image_prompt": (
-                        self.image_prompt_agent.generate_image_prompt(
-                            story_content["story"]
-                        )
+                    "image_prompt": self._generate_image_prompt_if_needed(
+                        story_content
                     ),
                 }
                 for story_content in state["instagram_story_contents"]
             ]
         }
+
+    def _generate_image_prompt_if_needed(
+        self, story_content: InstagramStoryContent
+    ) -> dict:
+        if AI_IMAGE_GENERATION_ENABLED and story_content["rank"] == 1:
+            return self.image_prompt_agent.generate_image_prompt(story_content["story"])
+
+        return {"image_prompt": ""}
 
     def _image_generator_node(self, state: EditorialGraphState) -> dict:
         return {
