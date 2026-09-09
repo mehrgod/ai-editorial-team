@@ -5,6 +5,7 @@ from ai_editorial_team.domain.models import (
     ImagePrompt,
     InstagramStoryContent,
     InstagramContent,
+    NewsworthinessDecision,
     PublicationRequest,
     PublicationResult,
     RankedStory,
@@ -25,6 +26,13 @@ class StorySummaryAgent(Protocol):
     """Interface for agents that write missing story summaries."""
 
     def summarize_story(self, story: Story) -> str:
+        ...
+
+
+class StoryNewsworthinessAgent(Protocol):
+    """Interface for agents that decide whether a story is timely news."""
+
+    def assess_story(self, story: Story) -> NewsworthinessDecision:
         ...
 
 

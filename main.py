@@ -25,6 +25,9 @@ def main() -> None:
     from ai_editorial_team.infrastructure.content.openai_story_summary_agent import (
         StorySummaryAgent,
     )
+    from ai_editorial_team.infrastructure.content.openai_story_newsworthiness_agent import (
+        StoryNewsworthinessAgent,
+    )
     from ai_editorial_team.infrastructure.content.openai_x_content_agent import (
         XContentAgent,
     )
@@ -67,9 +70,24 @@ def main() -> None:
     try:
         openai_bundle = create_openai_client_bundle_from_env()
         workflow = EditorialWorkflow(
-            finance_research_agent=create_finance_research_agent(),
-            ai_research_agent=create_ai_research_agent(),
-            sports_research_agent=create_sports_research_agent(),
+            finance_research_agent=create_finance_research_agent(
+                StoryNewsworthinessAgent(
+                    client=openai_bundle.client,
+                    model=openai_bundle.model,
+                )
+            ),
+            ai_research_agent=create_ai_research_agent(
+                StoryNewsworthinessAgent(
+                    client=openai_bundle.client,
+                    model=openai_bundle.model,
+                )
+            ),
+            sports_research_agent=create_sports_research_agent(
+                StoryNewsworthinessAgent(
+                    client=openai_bundle.client,
+                    model=openai_bundle.model,
+                )
+            ),
             story_summary_agent=StorySummaryAgent(
                 client=openai_bundle.client,
                 model=openai_bundle.model,

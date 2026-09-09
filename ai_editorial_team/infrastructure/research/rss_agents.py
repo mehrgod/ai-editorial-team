@@ -9,7 +9,10 @@ from urllib.request import Request, urlopen
 import xml.etree.ElementTree as ET
 
 from ai_editorial_team.domain.models import MISSING_RSS_SUMMARY, Story
-from ai_editorial_team.domain.ports import ResearchAgent
+from ai_editorial_team.domain.ports import ResearchAgent, StoryNewsworthinessAgent
+
+
+MAX_NEWSWORTHINESS_CANDIDATES = 10
 
 
 class RssFeedError(RuntimeError):
@@ -41,6 +44,8 @@ class RssResearchAgent:
     """Research agent backed by one or more RSS feeds."""
 
     config: RssResearchConfig
+    newsworthiness_agent: StoryNewsworthinessAgent | None = None
+    max_newsworthiness_candidates: int = MAX_NEWSWORTHINESS_CANDIDATES
     timeout_seconds: float = 6.0
 
     def research(self) -> Story:
@@ -51,15 +56,14 @@ class RssResearchAgent:
                 f"Failures: {'; '.join(failures)}"
             )
 
-        article = self._select_recent_article(articles)
-        return {
-            "domain": self.config.domain,
-            "headline": article.title,
-            "summary": article.summary,
-            "reason": (
-                f"Selected as the most recent article from " f"{article.source_name}."
-            ),
-        }
+        sorted_articles = self._sort_recent_articles(articles)
+        if self.newsworthiness_agent is None:
+            return self._story_from_article(
+                sorted_articles[0],
+                f"Selected as the most recent article from {sorted_articles[0].source_name}.",
+            )
+
+        return self._select_newsworthy_story(sorted_articles)
 
     def _fetch_all_articles(self) -> Tuple[List[RssArticle], List[str]]:
         if not self.config.feeds:
@@ -124,13 +128,56 @@ class RssResearchAgent:
             f"from {feed.source_name}: {feed.feed_url}"
         )
 
+    def _select_newsworthy_story(self, articles: List[RssArticle]) -> Story:
+        assessed_articles = articles[: self.max_newsworthiness_candidates]
+        for article in assessed_articles:
+            candidate = self._story_from_article(
+                article,
+                f"Candidate article from {article.source_name}.",
+            )
+            decision = self.newsworthiness_agent.assess_story(candidate)
+            if decision["is_newsworthy"]:
+                return self._story_from_article(
+                    article,
+                    (
+                        f"Selected as a newsworthy article from "
+                        f"{article.source_name}. {decision['reason']}"
+                    ),
+                )
+
+        return self._pending_story(len(assessed_articles))
+
     @staticmethod
-    def _select_recent_article(articles: Iterable[RssArticle]) -> RssArticle:
-        return max(
+    def _sort_recent_articles(articles: Iterable[RssArticle]) -> List[RssArticle]:
+        return sorted(
             articles,
             key=lambda article: article.published_at
             or datetime.min.replace(tzinfo=timezone.utc),
+            reverse=True,
         )
+
+    def _story_from_article(self, article: RssArticle, reason: str) -> Story:
+        return {
+            "domain": self.config.domain,
+            "headline": article.title,
+            "summary": article.summary,
+            "reason": reason,
+        }
+
+    def _pending_story(self, assessed_count: int) -> Story:
+        domain = self.config.domain
+        return {
+            "domain": domain,
+            "headline": f"{domain} news pending",
+            "summary": (
+                f"{domain} news is still coming in. The latest RSS candidates "
+                "were reviewed, but none were timely enough to publish yet."
+            ),
+            "reason": (
+                f"No newsworthy {domain} RSS candidate was found after "
+                f"assessing {assessed_count} recent article(s)."
+            ),
+        }
 
     def _parse_rss_articles(
         self, root: ET.Element, source_name: str
@@ -169,7 +216,9 @@ class RssResearchAgent:
         return articles
 
 
-def create_finance_research_agent() -> ResearchAgent:
+def create_finance_research_agent(
+    newsworthiness_agent: StoryNewsworthinessAgent | None = None,
+) -> ResearchAgent:
     return RssResearchAgent(
         RssResearchConfig(
             domain="Finance",
@@ -190,11 +239,14 @@ def create_finance_research_agent() -> ResearchAgent:
                     ),
                 ),
             ],
-        )
+        ),
+        newsworthiness_agent=newsworthiness_agent,
     )
 
 
-def create_ai_research_agent() -> ResearchAgent:
+def create_ai_research_agent(
+    newsworthiness_agent: StoryNewsworthinessAgent | None = None,
+) -> ResearchAgent:
     return RssResearchAgent(
         RssResearchConfig(
             domain="Artificial Intelligence",
@@ -215,11 +267,14 @@ def create_ai_research_agent() -> ResearchAgent:
                     feed_url="https://huggingface.co/blog/feed.xml",
                 ),
             ],
-        )
+        ),
+        newsworthiness_agent=newsworthiness_agent,
     )
 
 
-def create_sports_research_agent() -> ResearchAgent:
+def create_sports_research_agent(
+    newsworthiness_agent: StoryNewsworthinessAgent | None = None,
+) -> ResearchAgent:
     return RssResearchAgent(
         RssResearchConfig(
             domain="Sports",
@@ -237,7 +292,8 @@ def create_sports_research_agent() -> ResearchAgent:
                     feed_url="https://www.cbssports.com/rss/headlines/",
                 ),
             ],
-        )
+        ),
+        newsworthiness_agent=newsworthiness_agent,
     )
 
 

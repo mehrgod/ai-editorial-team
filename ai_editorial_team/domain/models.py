@@ -13,6 +13,11 @@ class Story(TypedDict):
     reason: str
 
 
+class NewsworthinessDecision(TypedDict):
+    is_newsworthy: bool
+    reason: str
+
+
 class RankedStory(TypedDict):
     rank: int
     story: Story
