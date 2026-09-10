@@ -15,6 +15,7 @@ class Story(TypedDict):
 
 class NewsworthinessDecision(TypedDict):
     is_newsworthy: bool
+    matches_domain: bool
     reason: str
 
 

@@ -10,14 +10,20 @@ from ai_editorial_team.infrastructure.research.rss_agents import (
 
 
 class FakeNewsworthinessAgent:
-    def __init__(self, accepted_headlines: set[str]) -> None:
+    def __init__(
+        self,
+        accepted_headlines: set[str],
+        domain_mismatch_headlines: set[str] | None = None,
+    ) -> None:
         self.accepted_headlines = accepted_headlines
+        self.domain_mismatch_headlines = domain_mismatch_headlines or set()
         self.received_stories = []
 
     def assess_story(self, story):
         self.received_stories.append(story)
         return {
             "is_newsworthy": story["headline"] in self.accepted_headlines,
+            "matches_domain": story["headline"] not in self.domain_mismatch_headlines,
             "reason": f"Assessed {story['headline']}.",
         }
 
@@ -55,7 +61,41 @@ class RssResearchNewsworthinessTests(unittest.TestCase):
             [story["headline"] for story in newsworthiness_agent.received_stories],
             ["Draft Guide", "Team signs star"],
         )
-        self.assertIn("Selected as a newsworthy article", story["reason"])
+        self.assertIn("Selected as a newsworthy Sports article", story["reason"])
+
+    def test_rejects_newsworthy_candidate_that_does_not_match_domain(self):
+        articles = [
+            _article(
+                "U.S. senator slams SEC over LSU threat",
+                "A senator criticized the SEC over LSU.",
+                "2026-09-09T12:00:00Z",
+            ),
+            _article(
+                "Team signs star",
+                "Contract announced",
+                "2026-09-09T10:00:00Z",
+            ),
+        ]
+        newsworthiness_agent = FakeNewsworthinessAgent(
+            {
+                "U.S. senator slams SEC over LSU threat",
+                "Team signs star",
+            },
+            domain_mismatch_headlines={"U.S. senator slams SEC over LSU threat"},
+        )
+        research_agent = FakeRssResearchAgent(
+            articles,
+            newsworthiness_agent=newsworthiness_agent,
+            max_newsworthiness_candidates=10,
+        )
+
+        story = research_agent.research()
+
+        self.assertEqual(story["headline"], "Team signs star")
+        self.assertEqual(
+            [story["headline"] for story in newsworthiness_agent.received_stories],
+            ["U.S. senator slams SEC over LSU threat", "Team signs star"],
+        )
 
     def test_returns_pending_story_when_no_recent_candidate_is_newsworthy(self):
         articles = [

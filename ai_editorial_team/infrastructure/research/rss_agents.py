@@ -136,12 +136,12 @@ class RssResearchAgent:
                 f"Candidate article from {article.source_name}.",
             )
             decision = self.newsworthiness_agent.assess_story(candidate)
-            if decision["is_newsworthy"]:
+            if decision["is_newsworthy"] and decision["matches_domain"]:
                 return self._story_from_article(
                     article,
                     (
-                        f"Selected as a newsworthy article from "
-                        f"{article.source_name}. {decision['reason']}"
+                        f"Selected as a newsworthy {self.config.domain} article "
+                        f"from {article.source_name}. {decision['reason']}"
                     ),
                 )
 
@@ -171,10 +171,11 @@ class RssResearchAgent:
             "headline": f"{domain} news pending",
             "summary": (
                 f"{domain} news is still coming in. The latest RSS candidates "
-                "were reviewed, but none were timely enough to publish yet."
+                "were reviewed, but none were timely and on-topic enough to "
+                "publish yet."
             ),
             "reason": (
-                f"No newsworthy {domain} RSS candidate was found after "
+                f"No timely, on-topic {domain} RSS candidate was found after "
                 f"assessing {assessed_count} recent article(s)."
             ),
         }

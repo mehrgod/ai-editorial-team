@@ -13,6 +13,10 @@ from ai_editorial_team.infrastructure.content.openai_story_summary_agent import 
     StorySummaryAgent,
     StorySummaryResponse,
 )
+from ai_editorial_team.infrastructure.content.openai_story_newsworthiness_agent import (
+    StoryNewsworthinessAgent,
+    StoryNewsworthinessResponse,
+)
 
 
 class OpenAIClientBundleTests(unittest.TestCase):
@@ -128,6 +132,43 @@ class StorySummaryAgentTests(unittest.TestCase):
                     "reason": "Finance reason",
                 }
             )
+
+
+class StoryNewsworthinessAgentTests(unittest.TestCase):
+    def test_story_newsworthiness_agent_returns_domain_match_decision(self):
+        class FakeResponses:
+            def parse(self, **kwargs):
+                class FakeParsedResponse:
+                    output_parsed = StoryNewsworthinessResponse(
+                        is_newsworthy=True,
+                        matches_domain=False,
+                        reason="Timely, but the main topic is politics.",
+                    )
+
+                return FakeParsedResponse()
+
+        class FakeClient:
+            responses = FakeResponses()
+
+        agent = StoryNewsworthinessAgent(client=FakeClient(), model="gpt-test")
+
+        decision = agent.assess_story(
+            {
+                "domain": "Sports",
+                "headline": "U.S. senator slams SEC over LSU threat",
+                "summary": "A senator criticized the SEC over LSU.",
+                "reason": "Candidate article from ESPN Top Headlines.",
+            }
+        )
+
+        self.assertEqual(
+            decision,
+            {
+                "is_newsworthy": True,
+                "matches_domain": False,
+                "reason": "Timely, but the main topic is politics.",
+            },
+        )
 
 
 if __name__ == "__main__":

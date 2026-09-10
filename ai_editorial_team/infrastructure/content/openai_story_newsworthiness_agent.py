@@ -16,8 +16,14 @@ class StoryNewsworthinessResponse(BaseModel):
     is_newsworthy: bool = Field(
         description="Whether the candidate is a timely news story."
     )
+    matches_domain: bool = Field(
+        description="Whether the candidate belongs to the requested domain."
+    )
     reason: str = Field(
-        description="Brief explanation for accepting or rejecting the story.",
+        description=(
+            "Brief explanation for accepting or rejecting the story, including "
+            "domain fit when relevant."
+        ),
         min_length=1,
         max_length=240,
     )
@@ -46,6 +52,7 @@ class StoryNewsworthinessAgent(
     ) -> NewsworthinessDecision:
         return {
             "is_newsworthy": response.is_newsworthy,
+            "matches_domain": response.matches_domain,
             "reason": response.reason.strip(),
         }
 
@@ -64,21 +71,32 @@ class StoryNewsworthinessAgent(
 def _newsworthiness_instructions() -> str:
     return (
         "You are a newsworthiness editor for an automated editorial workflow. "
-        "Accept timely news stories about concrete recent events, decisions, "
-        "announcements, results, injuries, market moves, product releases, or "
-        "public developments. Reject evergreen pages, guides, rankings hubs, "
-        "mock drafts, projections, betting pages, fantasy tools, previews, and "
-        "generic analysis pages unless they are clearly tied to a specific "
-        "current event. Return only structured JSON matching the provided "
-        "schema. Do not include free-form text."
+        "Accept only candidates that are both timely news and a clear fit for "
+        "the requested domain. Timely news includes concrete recent events, "
+        "decisions, announcements, results, injuries, market moves, product "
+        "releases, or public developments. Domain fit means Finance stories "
+        "must primarily concern business, markets, the economy, companies, "
+        "banking, or financial policy; Artificial Intelligence stories must "
+        "primarily concern AI technology, products, research, companies, "
+        "policy, or adoption; Sports stories must primarily concern games, "
+        "teams, athletes, leagues, competitions, trades, injuries, or sports "
+        "institutions. Reject candidates that only mention a sports school, "
+        "league, company, or technology in passing while the main story is "
+        "politics, crime, courts, entertainment, or another domain. Also reject "
+        "evergreen pages, guides, rankings hubs, mock drafts, projections, "
+        "betting pages, fantasy tools, previews, and generic analysis pages "
+        "unless they are clearly tied to a specific current event. Return only "
+        "structured JSON matching the provided schema. Do not include free-form "
+        "text."
     )
 
 
 def _newsworthiness_prompt(story: Story) -> str:
     return (
-        "Assess whether this RSS candidate should be used as a timely news "
-        "story for today's editorial package.\n\n"
-        f"Domain: {story['domain']}\n"
+        "Assess whether this RSS candidate should be used for the requested "
+        "editorial domain today. It must be both timely news and a clear match "
+        "for the requested domain.\n\n"
+        f"Requested Domain: {story['domain']}\n"
         f"Headline: {story['headline']}\n"
         f"Summary: {story['summary']}\n"
         f"Source Context: {story['reason']}"
