@@ -1,5 +1,11 @@
 # Product Requirements Document (PRD)
 
+> Status: historical starting document.
+>
+> This PRD captured the initial idea for the project. The implementation has since grown with additional learning-driven features such as RSS research, template image rendering, S3 uploads, Instagram carousel publishing, X publishing, token refresh, and tests. Treat the current README, architecture, operations, and development docs as the source of truth for how the project works today.
+>
+> The project is a personal learning implementation, not a product or service intended for other users.
+
 ## 1. Project Overview
 
 ### Project Name

@@ -1,113 +1,171 @@
 # System Architecture
 
-## 1. Overview
+AI Editorial Team is a CLI-first learning project for exploring agentic workflow design. It combines LangGraph orchestration, OpenAI-backed reasoning agents, RSS research, local image rendering, S3 storage, and optional social publishing.
 
-AI Editorial Team is an agentic AI application designed around a simple principle:
+The original design documents mention future pieces such as FastAPI and MCP tools. The current implementation is simpler and more direct: concrete Python adapters implement domain ports, and `main.py` wires those adapters into a LangGraph workflow.
 
-> Agents make decisions. Tools perform actions.
+## Runtime Flow
 
-The system is intentionally divided into two types of components:
+```text
+main.py
+  |
+  v
+CLI wiring and environment configuration
+  |
+  v
+EditorialWorkflow LangGraph
+  |
+  +--> Finance RSS Research Agent
+  +--> AI RSS Research Agent
+  +--> Sports RSS Research Agent
+          |
+          v
+      Chief Editor Agent
+          |
+          v
+      X Content Agent
+          |
+          v
+      Instagram Content Agent
+          |
+          v
+      Image Prompt Agent
+          |
+          v
+      Image Generator / Template Renderer
+          |
+          v
+      S3 Image Storage
+          |
+          v
+      Instagram Carousel Publisher
+          |
+          v
+      X Publisher
+```
 
-- **Agents**, which use LLM reasoning to make decisions.
-- **MCP Tools**, which perform deterministic tasks such as retrieving news, generating images, publishing content, and storing data.
+The workflow returns an `EditorialPackage` containing ranked Instagram story content, generated X content, and publication results for both platforms.
 
-The application is orchestrated by LangGraph, exposed through a FastAPI application, and designed to run locally during development before being deployed to AWS.
+## Layers
 
----
+### Domain
 
-## High-Level Workflow
+Location: `ai_editorial_team/domain`
 
-Research Agents
-        │
-        ▼
-Chief Editor Agent
-        │
-        ▼
-Content Package
-        │
-        ▼
-MCP Tools
-        │
-        ├── Image Generation
-        ├── Publish to Instagram
-        ├── Publish to X
-        └── Storage & Logging
+The domain layer defines the stable data contracts and ports:
 
----
+- `Story`, `RankedStory`, `InstagramStoryContent`, `XContent`
+- `GeneratedImage`, `StoredImage`, `PublicationRequest`, `PublicationResult`
+- Protocols such as `ResearchAgent`, `ChiefEditor`, `ImageStorage`, and `SocialPublisher`
 
-## 2. Design Principles
+This layer has no dependency on OpenAI, AWS, Instagram, X, or LangGraph.
 
-The following principles guide every architectural decision in this project.
+### Application
 
-### 2.1 Agents Reason
+Location: `ai_editorial_team/application/workflow.py`
 
-Agents are responsible for making decisions that require reasoning.
+`EditorialWorkflow` owns the LangGraph state machine. It coordinates the domain ports and enforces workflow-level assumptions:
 
-Examples include:
+- Exactly three research stories are expected.
+- Ranked stories must be ordered as ranks `1`, `2`, and `3`.
+- Instagram carousel publishing requires three stored image URLs.
+- X publishing requires three local image paths and generated post text no longer than 250 characters.
 
-- Selecting the most important story
-- Comparing candidate stories
-- Deciding what content should be published
+Publisher exceptions are caught inside workflow nodes and converted into failed `PublicationResult` objects so one publishing problem does not erase the rest of the editorial package.
 
-Agents should not directly interact with external services.
+### Infrastructure
 
----
+Location: `ai_editorial_team/infrastructure`
 
-### 2.2 Tools Perform Actions
+Infrastructure modules implement the domain ports:
 
-External operations are implemented as MCP tools.
+- `research/rss_agents.py`: RSS and Atom feed fetching, parsing, recency sorting, and LLM-assisted newsworthiness filtering.
+- `openai/`: OpenAI SDK configuration and shared client creation.
+- `content/`: OpenAI agents for summaries, newsworthiness, Instagram captions, X posts, and image prompts.
+- `editor/`: Chief Editor ranking agent.
+- `image_generation/`: OpenAI image generation and template image rendering.
+- `image_storage/`: S3 upload and presigned URL generation.
+- `publishing/`: Instagram Graph API carousel publishing and X media/post publishing.
 
-Examples include:
+### Presentation
 
-- Searching news
-- Generating images
-- Publishing to social media
-- Saving data
-- Writing logs
+Location: `ai_editorial_team/presentation/cli.py`
 
-Tools should not make business decisions.
+The CLI prints the ranked stories, generated content, image storage details, and publication results. There is no web server in the current implementation.
 
----
+## Research
 
-### 2.3 LangGraph Orchestrates
+Each research agent is configured with one domain and a small set of RSS feeds:
 
-LangGraph is responsible for coordinating the workflow.
+- Finance: CBS News MoneyWatch, BBC News Business, CNA Business
+- Artificial Intelligence: MIT News AI, Google AI Blog, Hugging Face Blog
+- Sports: ESPN, BBC Sport, CBS Sports
 
-It manages:
+The RSS adapter fetches all configured feeds, parses RSS or Atom entries, sorts articles by publication time, and asks the newsworthiness agent to assess a bounded number of recent candidates. If no article passes the newsworthiness and domain checks, the agent returns a pending placeholder story for that domain.
 
-- execution order
-- shared state
-- retries
-- conditional branching
-- error handling
+## Content Generation
 
-Business logic should remain inside agents, not inside the graph.
+OpenAI-backed agents are responsible for language tasks:
 
----
+- Fill in missing story summaries.
+- Decide whether RSS candidates are timely and on-domain.
+- Rank the three candidate stories.
+- Generate Instagram captions.
+- Generate a concise X post.
+- Generate an image prompt if AI image generation is re-enabled.
 
-### 2.4 Components Have a Single Responsibility
+The application layer treats these as replaceable ports. A different model provider could be introduced by implementing the same protocols.
 
-Each component should have one clear responsibility.
+## Images
 
-For example:
+AI image generation is currently disabled by the `AI_IMAGE_GENERATION_ENABLED` flag in `workflow.py`. With the default setting, all ranked stories use `TemplateImageRenderer`, which creates square PNG social cards with Pillow and writes them to `output/images/`.
 
-- Research agents find stories.
-- The Chief Editor selects the winner.
-- Image generation creates images.
-- Publishers publish.
-- Storage saves data.
+`OpenAIImageGenerator` still exists and can generate a `1024x1024` PNG from a prompt if the workflow flag is re-enabled.
 
-Avoid components that perform multiple unrelated tasks.
+## Storage
 
----
+`S3ImageStorage` uploads each generated local image to the configured S3 bucket under the `images/` prefix and returns:
 
-### 2.5 Everything Should Be Replaceable
+- the S3 object key
+- a presigned URL that can be used by Instagram to read the image
 
-The system should be designed so that individual components can be replaced without affecting the rest of the application.
+S3 configuration is required because storage happens before the publishing nodes.
 
-Examples include:
+## Publishing
 
-- OpenAI → Amazon Bedrock
-- RSS → News API
-- Instagram → LinkedIn
-- Local storage → Amazon S3
+### Instagram
+
+`InstagramPublisher` publishes a three-image carousel through the Instagram Graph API:
+
+1. Create one carousel item container per image URL.
+2. Poll each child container until it is ready.
+3. Create a parent carousel container with the caption.
+4. Poll the parent container until it is ready.
+5. Publish the container.
+6. Resolve the publication permalink.
+
+Missing or invalid Instagram configuration creates an unavailable publisher during startup. The workflow still completes and reports Instagram publication as failed.
+
+### X
+
+`XPublisher` uploads three local images, creates a post with attached media IDs, and returns the X status URL.
+
+The X factory reads current user tokens from AWS Secrets Manager, refreshes the access token with the configured X OAuth client, and writes refreshed tokens back to the same secret. Missing or invalid X configuration creates an unavailable publisher during startup.
+
+## Error Handling
+
+Startup errors from required infrastructure stop the CLI:
+
+- missing OpenAI API key
+- missing S3 configuration
+- RSS feeds that cannot produce stories
+
+Publishing errors are intentionally isolated. Instagram or X failures become failed publication results so the user can still inspect the generated editorial package.
+
+## Design Principles
+
+- Agents make editorial decisions.
+- Adapters perform external side effects.
+- The application layer orchestrates through ports.
+- Domain models stay independent of vendors.
+- Integrations should be replaceable without rewriting the workflow.
