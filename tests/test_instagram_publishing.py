@@ -1,10 +1,16 @@
+import io
 import unittest
+from unittest.mock import patch
+from urllib.error import HTTPError
 
 from ai_editorial_team.domain.ports import SocialPublisher
 from ai_editorial_team.infrastructure.publishing.instagram_publisher import (
+    InstagramAuthenticationError,
     InstagramMediaContainerError,
     InstagramPublishingError,
     InstagramPublisher,
+    InstagramPublishingConfig,
+    MetaInstagramGraphApi,
 )
 
 
@@ -172,7 +178,7 @@ class InstagramPublishingTests(unittest.TestCase):
         api = PublishRaceInstagramGraphApi()
         publisher = InstagramPublisher(api=api)
 
-        with unittest.mock.patch(
+        with patch(
             "ai_editorial_team.infrastructure.publishing.instagram_publisher."
             "time.sleep"
         ):
@@ -209,3 +215,27 @@ class InstagramPublishingTests(unittest.TestCase):
             "carousel item container creation failed",
             str(context.exception),
         )
+
+    def test_graph_api_400_expired_access_token_is_authentication_error(self):
+        api = MetaInstagramGraphApi(
+            InstagramPublishingConfig(
+                instagram_professional_account_id="ig-account-id",
+                meta_access_token="expired-token",
+            )
+        )
+        body = (
+            b'{"error":{"message":"Error validating access token: Session has '
+            b'expired on Tuesday, 29-Sep-26 17:27:38 PDT.","type":"OAuthException"}}'
+        )
+        error = HTTPError(
+            url="https://graph.instagram.com/v24.0/ig-account-id/media",
+            code=400,
+            msg="Bad Request",
+            hdrs={},
+            fp=io.BytesIO(body),
+        )
+
+        result = api._error_from_http_error(error)
+
+        self.assertIsInstance(result, InstagramAuthenticationError)
+        self.assertIn("Error validating access token", str(result))

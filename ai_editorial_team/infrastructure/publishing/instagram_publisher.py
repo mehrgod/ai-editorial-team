@@ -249,7 +249,7 @@ class MetaInstagramGraphApi:
         body = exc.read().decode("utf-8") if exc.fp else ""
         message = _extract_meta_error_message(body) or exc.reason
 
-        if exc.code in (401, 403):
+        if exc.code in (401, 403) or _is_meta_authentication_error(message):
             return InstagramAuthenticationError(
                 f"Instagram authentication failed: {message}"
             )
@@ -399,6 +399,20 @@ class InstagramPublisher(SocialPublisher):
 
 def _is_media_id_not_available_error(exc: InstagramPublishingError) -> bool:
     return MEDIA_ID_NOT_AVAILABLE_MESSAGE in str(exc)
+
+
+def _is_meta_authentication_error(message: str) -> bool:
+    normalized_message = message.lower()
+    return any(
+        phrase in normalized_message
+        for phrase in (
+            "error validating access token",
+            "access token has expired",
+            "session has expired",
+            "invalid oauth access token",
+            "oauth",
+        )
+    )
 
 
 def _extract_meta_error_message(body: str) -> str | None:
