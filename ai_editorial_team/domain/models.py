@@ -72,6 +72,8 @@ class PublicationResult(TypedDict):
     platform: str
     publication_id: str
     publication_url: str
+    status: NotRequired[str]
+    error: NotRequired[str]
 
 
 class EditorialState(TypedDict, total=False):

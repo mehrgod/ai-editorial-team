@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+import logging
 from operator import add
 from typing import Callable, List
 
@@ -9,6 +10,7 @@ from ai_editorial_team.domain.models import (
     EditorialPackage,
     InstagramStoryContent,
     MISSING_RSS_SUMMARY,
+    PublicationRequest,
     PublicationResult,
     RankedStory,
     Story,
@@ -42,6 +44,8 @@ X_PUBLISHER_NODE = "X Publisher"
 
 AI_IMAGE_GENERATION_ENABLED = False
 
+logger = logging.getLogger(__name__)
+
 
 class ResearchNodeResult(TypedDict):
     stories: List[Story]
@@ -56,6 +60,17 @@ class EditorialGraphState(TypedDict, total=False):
     instagram_publication: PublicationResult
     x_content: XContent
     x_publication: PublicationResult
+
+
+@dataclass(frozen=True)
+class UnavailablePublisher(SocialPublisher):
+    """Publisher replacement used when a platform cannot be configured."""
+
+    platform: str
+    error: str
+
+    def publish(self, publication: PublicationRequest) -> PublicationResult:
+        return _failed_publication(self.platform, RuntimeError(self.error))
 
 
 @dataclass(frozen=True)
@@ -231,10 +246,10 @@ class EditorialWorkflow:
 
     def _instagram_publisher_node(self, state: EditorialGraphState) -> dict:
         story_contents = state["instagram_story_contents"]
-        _validate_carousel_story_contents(story_contents)
 
-        return {
-            "instagram_publication": self.instagram_publisher.publish(
+        try:
+            _validate_carousel_story_contents(story_contents)
+            publication = self.instagram_publisher.publish(
                 {
                     "caption": _build_carousel_caption(story_contents),
                     "image_urls": [
@@ -243,15 +258,18 @@ class EditorialWorkflow:
                     ],
                 }
             )
-        }
+        except Exception as exc:
+            publication = _failed_publication("Instagram", exc)
+
+        return {"instagram_publication": publication}
 
     def _x_publisher_node(self, state: EditorialGraphState) -> dict:
         story_contents = state["instagram_story_contents"]
         x_content = state["x_content"]
-        _validate_x_publication_inputs(story_contents, x_content)
 
-        return {
-            "x_publication": self.x_publisher.publish(
+        try:
+            _validate_x_publication_inputs(story_contents, x_content)
+            publication = self.x_publisher.publish(
                 {
                     "text": x_content["post"],
                     "image_paths": [
@@ -260,7 +278,10 @@ class EditorialWorkflow:
                     ],
                 }
             )
-        }
+        except Exception as exc:
+            publication = _failed_publication("X", exc)
+
+        return {"x_publication": publication}
 
 
 def _has_real_summary(summary: str) -> bool:
@@ -280,6 +301,17 @@ def _build_carousel_caption(
         f"{story_content['rank']}. " f"{story_content['instagram_content']['caption']}"
         for story_content in story_contents
     )
+
+
+def _failed_publication(platform: str, exc: Exception) -> PublicationResult:
+    logger.warning("%s publishing failed; continuing workflow: %s", platform, exc)
+    return {
+        "platform": platform,
+        "publication_id": "",
+        "publication_url": "",
+        "status": "failed",
+        "error": str(exc),
+    }
 
 
 def _validate_ranked_stories(ranked_stories: List[RankedStory]) -> None:

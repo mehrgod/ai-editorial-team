@@ -15,7 +15,10 @@ def main() -> None:
             f"{required_version}+. Current interpreter: Python {current_version}."
         )
 
-    from ai_editorial_team.application.workflow import EditorialWorkflow
+    from ai_editorial_team.application.workflow import (
+        EditorialWorkflow,
+        UnavailablePublisher,
+    )
     from ai_editorial_team.infrastructure.content.openai_instagram_content_agent import (
         InstagramContentAgent,
     )
@@ -114,8 +117,18 @@ def main() -> None:
             ),
             template_image_renderer=TemplateImageRenderer(),
             image_storage=create_s3_image_storage_from_env(),
-            instagram_publisher=create_instagram_publisher_from_env(),
-            x_publisher=create_x_publisher_from_env(),
+            instagram_publisher=_create_optional_publisher(
+                "Instagram",
+                create_instagram_publisher_from_env,
+                InstagramPublishingError,
+                UnavailablePublisher,
+            ),
+            x_publisher=_create_optional_publisher(
+                "X",
+                create_x_publisher_from_env,
+                XPublishingError,
+                UnavailablePublisher,
+            ),
         )
         run_cli(workflow)
     except (
@@ -128,6 +141,18 @@ def main() -> None:
         raise SystemExit(f"Error: {exc}")
     finally:
         wait_for_all_tracers()
+
+
+def _create_optional_publisher(
+    platform: str,
+    factory,
+    error_type: type[Exception],
+    unavailable_publisher_type,
+):
+    try:
+        return factory()
+    except error_type as exc:
+        return unavailable_publisher_type(platform, str(exc))
 
 
 if __name__ == "__main__":

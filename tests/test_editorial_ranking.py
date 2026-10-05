@@ -134,6 +134,16 @@ class RecordingXPublisher:
         }
 
 
+class FailingPublisher:
+    def __init__(self, message: str) -> None:
+        self.message = message
+        self.received_publications = []
+
+    def publish(self, publication):
+        self.received_publications.append(publication)
+        raise RuntimeError(self.message)
+
+
 class EditorialRankingWorkflowTests(unittest.TestCase):
     def setUp(self) -> None:
         self.finance_story = {
@@ -164,7 +174,10 @@ class EditorialRankingWorkflowTests(unittest.TestCase):
         self.image_storage = RecordingImageStorage()
         self.instagram_publisher = RecordingInstagramPublisher()
         self.x_publisher = RecordingXPublisher()
-        self.workflow = EditorialWorkflow(
+        self.workflow = self._build_workflow()
+
+    def _build_workflow(self, *, instagram_publisher=None, x_publisher=None):
+        return EditorialWorkflow(
             finance_research_agent=FakeResearchAgent(self.finance_story),
             ai_research_agent=FakeResearchAgent(self.ai_story),
             sports_research_agent=FakeResearchAgent(self.sports_story),
@@ -176,8 +189,8 @@ class EditorialRankingWorkflowTests(unittest.TestCase):
             image_generator=self.image_generator,
             template_image_renderer=self.template_image_renderer,
             image_storage=self.image_storage,
-            instagram_publisher=self.instagram_publisher,
-            x_publisher=self.x_publisher,
+            instagram_publisher=instagram_publisher or self.instagram_publisher,
+            x_publisher=x_publisher or self.x_publisher,
         )
 
     def test_all_three_stories_are_passed_to_chief_editor(self):
@@ -480,6 +493,25 @@ class EditorialRankingWorkflowTests(unittest.TestCase):
             },
         )
 
+    def test_instagram_publish_failure_does_not_stop_x_publishing(self):
+        failing_instagram_publisher = FailingPublisher("Instagram token expired")
+        workflow = self._build_workflow(instagram_publisher=failing_instagram_publisher)
+
+        result = workflow.run()
+
+        self.assertEqual(
+            result["instagram_publication"],
+            {
+                "platform": "Instagram",
+                "publication_id": "",
+                "publication_url": "",
+                "status": "failed",
+                "error": "Instagram token expired",
+            },
+        )
+        self.assertEqual(result["x_publication"]["publication_id"], "x-post-123")
+        self.assertEqual(len(self.x_publisher.received_publications), 1)
+
     def test_x_publisher_receives_combined_post_and_ranked_image_paths_once(self):
         self.workflow.run()
 
@@ -505,6 +537,27 @@ class EditorialRankingWorkflowTests(unittest.TestCase):
                 "platform": "X",
                 "publication_id": "x-post-123",
                 "publication_url": "https://x.com/i/web/status/x-post-123",
+            },
+        )
+
+    def test_x_publish_failure_does_not_discard_instagram_result(self):
+        failing_x_publisher = FailingPublisher("X token refresh failed")
+        workflow = self._build_workflow(x_publisher=failing_x_publisher)
+
+        result = workflow.run()
+
+        self.assertEqual(
+            result["instagram_publication"]["publication_id"],
+            "carousel-123",
+        )
+        self.assertEqual(
+            result["x_publication"],
+            {
+                "platform": "X",
+                "publication_id": "",
+                "publication_url": "",
+                "status": "failed",
+                "error": "X token refresh failed",
             },
         )
 
