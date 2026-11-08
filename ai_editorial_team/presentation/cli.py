@@ -1,8 +1,8 @@
-from ai_editorial_team.application.workflow import EditorialWorkflow
+from ai_editorial_team.application.run_tracking import EditorialWorkflowRunner
 from ai_editorial_team.domain.models import PublicationResult
 
 
-def run_cli(workflow: EditorialWorkflow) -> None:
+def run_cli(workflow: EditorialWorkflowRunner) -> None:
     """Run the editorial workflow and print ranked Instagram content."""
     result = workflow.run()
     instagram_story_contents = result["instagram_story_contents"]

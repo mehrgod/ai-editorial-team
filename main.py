@@ -19,6 +19,7 @@ def main() -> None:
         EditorialWorkflow,
         UnavailablePublisher,
     )
+    from ai_editorial_team.application.run_tracking import RunTrackedEditorialWorkflow
     from ai_editorial_team.infrastructure.content.openai_instagram_content_agent import (
         InstagramContentAgent,
     )
@@ -43,6 +44,10 @@ def main() -> None:
     from ai_editorial_team.infrastructure.image_storage.s3_image_storage import (
         S3ImageStorageError,
         create_s3_image_storage_from_env,
+    )
+    from ai_editorial_team.infrastructure.persistence.postgres_run_repository import (
+        PostgresRunRepository,
+        PostgresRunRepositoryError,
     )
     from ai_editorial_team.infrastructure.research.rss_agents import (
         RssFeedError,
@@ -72,69 +77,73 @@ def main() -> None:
 
     try:
         openai_bundle = create_openai_client_bundle_from_env()
-        workflow = EditorialWorkflow(
-            finance_research_agent=create_finance_research_agent(
-                StoryNewsworthinessAgent(
+        workflow = RunTrackedEditorialWorkflow(
+            workflow=EditorialWorkflow(
+                finance_research_agent=create_finance_research_agent(
+                    StoryNewsworthinessAgent(
+                        client=openai_bundle.client,
+                        model=openai_bundle.model,
+                    )
+                ),
+                ai_research_agent=create_ai_research_agent(
+                    StoryNewsworthinessAgent(
+                        client=openai_bundle.client,
+                        model=openai_bundle.model,
+                    )
+                ),
+                sports_research_agent=create_sports_research_agent(
+                    StoryNewsworthinessAgent(
+                        client=openai_bundle.client,
+                        model=openai_bundle.model,
+                    )
+                ),
+                story_summary_agent=StorySummaryAgent(
                     client=openai_bundle.client,
                     model=openai_bundle.model,
-                )
-            ),
-            ai_research_agent=create_ai_research_agent(
-                StoryNewsworthinessAgent(
+                ),
+                chief_editor=LLMChiefEditor(
                     client=openai_bundle.client,
                     model=openai_bundle.model,
-                )
-            ),
-            sports_research_agent=create_sports_research_agent(
-                StoryNewsworthinessAgent(
+                ),
+                x_content_agent=XContentAgent(
                     client=openai_bundle.client,
                     model=openai_bundle.model,
-                )
+                ),
+                instagram_content_agent=InstagramContentAgent(
+                    client=openai_bundle.client,
+                    model=openai_bundle.model,
+                ),
+                image_prompt_agent=ImagePromptAgent(
+                    client=openai_bundle.client,
+                    model=openai_bundle.model,
+                ),
+                image_generator=OpenAIImageGenerator(
+                    client=openai_bundle.image_client,
+                    model=openai_bundle.image_model,
+                ),
+                template_image_renderer=TemplateImageRenderer(),
+                image_storage=create_s3_image_storage_from_env(),
+                instagram_publisher=_create_optional_publisher(
+                    "Instagram",
+                    create_instagram_publisher_from_env,
+                    InstagramPublishingError,
+                    UnavailablePublisher,
+                ),
+                x_publisher=_create_optional_publisher(
+                    "X",
+                    create_x_publisher_from_env,
+                    XPublishingError,
+                    UnavailablePublisher,
+                ),
             ),
-            story_summary_agent=StorySummaryAgent(
-                client=openai_bundle.client,
-                model=openai_bundle.model,
-            ),
-            chief_editor=LLMChiefEditor(
-                client=openai_bundle.client,
-                model=openai_bundle.model,
-            ),
-            x_content_agent=XContentAgent(
-                client=openai_bundle.client,
-                model=openai_bundle.model,
-            ),
-            instagram_content_agent=InstagramContentAgent(
-                client=openai_bundle.client,
-                model=openai_bundle.model,
-            ),
-            image_prompt_agent=ImagePromptAgent(
-                client=openai_bundle.client,
-                model=openai_bundle.model,
-            ),
-            image_generator=OpenAIImageGenerator(
-                client=openai_bundle.image_client,
-                model=openai_bundle.image_model,
-            ),
-            template_image_renderer=TemplateImageRenderer(),
-            image_storage=create_s3_image_storage_from_env(),
-            instagram_publisher=_create_optional_publisher(
-                "Instagram",
-                create_instagram_publisher_from_env,
-                InstagramPublishingError,
-                UnavailablePublisher,
-            ),
-            x_publisher=_create_optional_publisher(
-                "X",
-                create_x_publisher_from_env,
-                XPublishingError,
-                UnavailablePublisher,
-            ),
+            run_repository=PostgresRunRepository.from_env(),
         )
         run_cli(workflow)
     except (
         RssFeedError,
         OpenAIInfrastructureError,
         S3ImageStorageError,
+        PostgresRunRepositoryError,
         InstagramPublishingError,
         XPublishingError,
     ) as exc:

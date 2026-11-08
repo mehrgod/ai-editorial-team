@@ -1,4 +1,6 @@
+from datetime import datetime
 from typing import List, Protocol, runtime_checkable
+from uuid import UUID
 
 from ai_editorial_team.domain.models import (
     GeneratedImage,
@@ -82,6 +84,33 @@ class ImageStorage(Protocol):
     """Interface for storing a generated local image externally."""
 
     def store(self, local_file_path: str) -> StoredImage:
+        ...
+
+
+class RunRepository(Protocol):
+    """Interface for persisting workflow execution data."""
+
+    def create_run(self, run_id: UUID, started_at: datetime) -> None:
+        ...
+
+    def finish_run(
+        self,
+        run_id: UUID,
+        finished_at: datetime,
+        status: str,
+        duration_seconds: float,
+    ) -> None:
+        ...
+
+    def save_stories(self, run_id: UUID, stories: List[RankedStory]) -> None:
+        ...
+
+    def save_publications(
+        self,
+        run_id: UUID,
+        publications: List[PublicationResult],
+        published_at: datetime,
+    ) -> None:
         ...
 
 
