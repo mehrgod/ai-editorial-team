@@ -76,10 +76,34 @@ def _render_schedule_control(control: AwsDashboardControl) -> None:
         st.caption("Current schedule expression")
         st.code(schedule.expression)
         st.caption(f"Timezone: {schedule.timezone}")
+        st.text(f"Scheduler: {_display_status(schedule.state)}")
         st.text(
             "Current posting time: "
             f"{_format_posting_time(schedule.posting_time)} ({schedule.timezone})"
         )
+
+        schedule_update_message = st.session_state.pop(
+            "schedule_update_message",
+            None,
+        )
+        if schedule_update_message:
+            st.success(schedule_update_message)
+
+        schedule_is_enabled = schedule.state == "ENABLED"
+        schedule_action = "Disable" if schedule_is_enabled else "Enable"
+        if st.button(
+            f"{schedule_action} Schedule",
+            key="schedule_state_button",
+        ):
+            try:
+                control.set_schedule_enabled(not schedule_is_enabled)
+            except AwsDashboardControlError as exc:
+                st.error(str(exc))
+            else:
+                st.session_state[
+                    "schedule_update_message"
+                ] = f"Schedule {schedule_action.lower()}d successfully."
+                st.rerun()
 
         with st.form("schedule_time_form", border=False):
             posting_time = st.time_input(

@@ -73,7 +73,20 @@ class AwsDashboardControlTests(unittest.TestCase):
         self.assertEqual(actual.expression, "cron(15 9 * * ? *)")
         self.assertEqual(actual.timezone, "America/New_York")
         self.assertEqual(actual.posting_time, time(9, 15))
+        self.assertEqual(actual.state, "ENABLED")
         scheduler.get_schedule.assert_called_once_with(Name=SCHEDULE_NAME)
+
+    def test_scheduler_read_returns_disabled_state(self):
+        scheduler = Mock()
+        scheduler.get_schedule.return_value = {
+            **SCHEDULE_RESPONSE,
+            "State": "DISABLED",
+        }
+        control = AwsDashboardControl(scheduler_client=scheduler, ecs_client=Mock())
+
+        actual = control.get_schedule()
+
+        self.assertEqual(actual.state, "DISABLED")
 
     def test_daily_cron_time_parsing_and_rebuilding(self):
         self.assertEqual(parse_daily_cron_time("cron(5 18 * * ? *)"), time(18, 5))
@@ -113,6 +126,74 @@ class AwsDashboardControlTests(unittest.TestCase):
         self.assertIs(request["Target"], SCHEDULE_RESPONSE["Target"])
         self.assertEqual(updated.expression, "cron(30 14 * * ? *)")
         self.assertEqual(updated.posting_time, time(14, 30))
+        self.assertEqual(updated.state, "ENABLED")
+
+    def test_disabling_schedule_changes_only_state(self):
+        scheduler = Mock()
+        scheduler.get_schedule.return_value = SCHEDULE_RESPONSE
+        control = AwsDashboardControl(scheduler_client=scheduler, ecs_client=Mock())
+
+        updated = control.set_schedule_enabled(False)
+
+        request = scheduler.update_schedule.call_args.kwargs
+        self.assertEqual(request["State"], "DISABLED")
+        self.assertEqual(
+            request["ScheduleExpression"],
+            SCHEDULE_RESPONSE["ScheduleExpression"],
+        )
+        self.assertIs(request["Target"], SCHEDULE_RESPONSE["Target"])
+        self.assertEqual(
+            {**request, "State": SCHEDULE_RESPONSE["State"]},
+            _expected_schedule_update_request(),
+        )
+        self.assertEqual(updated.state, "DISABLED")
+        self.assertEqual(updated.posting_time, time(9, 15))
+
+    def test_enabling_schedule_changes_only_state(self):
+        scheduler = Mock()
+        disabled_schedule = {**SCHEDULE_RESPONSE, "State": "DISABLED"}
+        scheduler.get_schedule.return_value = disabled_schedule
+        control = AwsDashboardControl(scheduler_client=scheduler, ecs_client=Mock())
+
+        updated = control.set_schedule_enabled(True)
+
+        request = scheduler.update_schedule.call_args.kwargs
+        self.assertEqual(request["State"], "ENABLED")
+        self.assertEqual(
+            request["ScheduleExpression"],
+            SCHEDULE_RESPONSE["ScheduleExpression"],
+        )
+        self.assertIs(request["Target"], SCHEDULE_RESPONSE["Target"])
+        self.assertEqual(
+            {**request, "State": SCHEDULE_RESPONSE["State"]},
+            _expected_schedule_update_request(),
+        )
+        self.assertEqual(updated.state, "ENABLED")
+        self.assertEqual(updated.posting_time, time(9, 15))
+
+    def test_schedule_state_update_surfaces_aws_failure(self):
+        scheduler = Mock()
+        scheduler.get_schedule.return_value = SCHEDULE_RESPONSE
+        scheduler.update_schedule.side_effect = ClientError(
+            {
+                "Error": {
+                    "Code": "ServiceUnavailableException",
+                    "Message": "sensitive AWS response",
+                }
+            },
+            "UpdateSchedule",
+        )
+        control = AwsDashboardControl(scheduler_client=scheduler, ecs_client=Mock())
+
+        with self.assertRaises(AwsDashboardControlError) as context:
+            control.set_schedule_enabled(False)
+
+        self.assertEqual(
+            str(context.exception),
+            "Could not update the AWS schedule. AWS returned "
+            "ServiceUnavailableException.",
+        )
+        self.assertNotIn("sensitive", str(context.exception))
 
     def test_run_now_uses_expected_ecs_configuration(self):
         ecs = Mock()
@@ -272,6 +353,7 @@ class AwsDashboardControlTests(unittest.TestCase):
             expression="cron(0 12 * * ? *)",
             timezone="America/New_York",
             posting_time=time(12),
+            state="ENABLED",
         )
         control.run_now.return_value = "arn:aws:ecs:us-east-1:123456789012:task/example"
 
@@ -290,6 +372,104 @@ class AwsDashboardControlTests(unittest.TestCase):
 
         self.assertFalse(app.exception)
         control.run_now.assert_called_once_with()
+
+    def test_enabled_schedule_shows_disable_action_and_one_click_updates_once(self):
+        repository = Mock()
+        repository.get_latest_run.return_value = None
+        enabled = ScheduleDetails(
+            expression="cron(0 12 * * ? *)",
+            timezone="America/New_York",
+            posting_time=time(12),
+            state="ENABLED",
+        )
+        disabled = ScheduleDetails(
+            expression=enabled.expression,
+            timezone=enabled.timezone,
+            posting_time=enabled.posting_time,
+            state="DISABLED",
+        )
+        control = Mock()
+        control.get_schedule.side_effect = [enabled, enabled, disabled]
+        control.set_schedule_enabled.return_value = disabled
+
+        with patch(
+            "ai_editorial_team.infrastructure.persistence."
+            "postgres_dashboard_repository.PostgresDashboardRepository.from_env",
+            return_value=repository,
+        ), patch(
+            "ai_editorial_team.infrastructure.aws."
+            "dashboard_control.AwsDashboardControl.from_default_credentials",
+            return_value=control,
+        ):
+            app = AppTest.from_file(str(DASHBOARD_PATH)).run(timeout=10)
+            self.assertEqual(
+                app.button(key="schedule_state_button").label,
+                "Disable Schedule",
+            )
+            app.button(key="schedule_state_button").click().run(timeout=10)
+
+        self.assertFalse(app.exception)
+        control.set_schedule_enabled.assert_called_once_with(False)
+        self.assertEqual(
+            app.button(key="schedule_state_button").label,
+            "Enable Schedule",
+        )
+        self.assertTrue(any(text.value == "Scheduler: Disabled" for text in app.text))
+        self.assertTrue(
+            any(
+                success.value == "Schedule disabled successfully."
+                for success in app.success
+            )
+        )
+
+    def test_disabled_schedule_shows_enable_action(self):
+        repository = Mock()
+        repository.get_latest_run.return_value = None
+        control = Mock()
+        control.get_schedule.return_value = ScheduleDetails(
+            expression="cron(0 12 * * ? *)",
+            timezone="America/New_York",
+            posting_time=time(12),
+            state="DISABLED",
+        )
+
+        with patch(
+            "ai_editorial_team.infrastructure.persistence."
+            "postgres_dashboard_repository.PostgresDashboardRepository.from_env",
+            return_value=repository,
+        ), patch(
+            "ai_editorial_team.infrastructure.aws."
+            "dashboard_control.AwsDashboardControl.from_default_credentials",
+            return_value=control,
+        ):
+            app = AppTest.from_file(str(DASHBOARD_PATH)).run(timeout=10)
+
+        self.assertFalse(app.exception)
+        self.assertEqual(
+            app.button(key="schedule_state_button").label,
+            "Enable Schedule",
+        )
+        self.assertTrue(any(text.value == "Scheduler: Disabled" for text in app.text))
+
+
+def _expected_schedule_update_request():
+    return {
+        field: SCHEDULE_RESPONSE[field]
+        for field in (
+            "ActionAfterCompletion",
+            "Description",
+            "EndDate",
+            "FlexibleTimeWindow",
+            "GroupName",
+            "KmsKeyArn",
+            "Name",
+            "ScheduleExpression",
+            "ScheduleExpressionTimezone",
+            "StartDate",
+            "State",
+            "Target",
+        )
+    }
 
 
 if __name__ == "__main__":

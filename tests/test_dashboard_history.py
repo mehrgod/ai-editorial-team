@@ -46,6 +46,7 @@ class DashboardHistoryTests(unittest.TestCase):
             expression="cron(0 18 * * ? *)",
             timezone="America/New_York",
             posting_time=time(18),
+            state="ENABLED",
         )
 
         with patch(

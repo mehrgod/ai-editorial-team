@@ -22,6 +22,7 @@ _UPDATABLE_SCHEDULE_FIELDS = (
     "GroupName",
     "KmsKeyArn",
     "Name",
+    "ScheduleExpression",
     "ScheduleExpressionTimezone",
     "StartDate",
     "State",
@@ -38,6 +39,7 @@ class ScheduleDetails:
     expression: str
     timezone: str
     posting_time: time
+    state: str
 
 
 @dataclass(frozen=True)
@@ -74,6 +76,7 @@ class AwsDashboardControl:
             expression=expression,
             timezone=schedule.get("ScheduleExpressionTimezone", "UTC"),
             posting_time=posting_time,
+            state=schedule.get("State", "ENABLED"),
         )
 
     def update_schedule_time(self, posting_time: time) -> ScheduleDetails:
@@ -89,27 +92,29 @@ class AwsDashboardControl:
                 "The configured schedule is not a supported daily cron expression."
             ) from exc
 
-        update_request = {
-            field: schedule[field]
-            for field in _UPDATABLE_SCHEDULE_FIELDS
-            if field in schedule
-        }
-        update_request["Name"] = schedule.get("Name", self.schedule_name)
+        update_request = self._build_schedule_update_request(schedule)
         update_request["ScheduleExpression"] = updated_expression
-
-        try:
-            self.scheduler_client.update_schedule(**update_request)
-        except ClientError as exc:
-            raise AwsDashboardControlError(_schedule_update_error_message(exc)) from exc
-        except BotoCoreError as exc:
-            raise AwsDashboardControlError(
-                "Could not update the AWS schedule. Check credentials and IAM permissions."
-            ) from exc
+        self._update_schedule(update_request)
 
         return ScheduleDetails(
             expression=updated_expression,
             timezone=schedule.get("ScheduleExpressionTimezone", "UTC"),
             posting_time=posting_time.replace(second=0, microsecond=0),
+            state=schedule.get("State", "ENABLED"),
+        )
+
+    def set_schedule_enabled(self, enabled: bool) -> ScheduleDetails:
+        schedule = self._get_schedule_response()
+        state = "ENABLED" if enabled else "DISABLED"
+        update_request = self._build_schedule_update_request(schedule)
+        update_request["State"] = state
+        self._update_schedule(update_request)
+
+        return ScheduleDetails(
+            expression=schedule["ScheduleExpression"],
+            timezone=schedule.get("ScheduleExpressionTimezone", "UTC"),
+            posting_time=parse_daily_cron_time(schedule["ScheduleExpression"]),
+            state=state,
         )
 
     def run_now(self) -> str | None:
@@ -154,6 +159,28 @@ class AwsDashboardControl:
         except (BotoCoreError, ClientError) as exc:
             raise AwsDashboardControlError(
                 "Could not read the AWS schedule. Check credentials and IAM permissions."
+            ) from exc
+
+    def _build_schedule_update_request(
+        self,
+        schedule: dict[str, Any],
+    ) -> dict[str, Any]:
+        update_request = {
+            field: schedule[field]
+            for field in _UPDATABLE_SCHEDULE_FIELDS
+            if field in schedule
+        }
+        update_request["Name"] = schedule.get("Name", self.schedule_name)
+        return update_request
+
+    def _update_schedule(self, update_request: dict[str, Any]) -> None:
+        try:
+            self.scheduler_client.update_schedule(**update_request)
+        except ClientError as exc:
+            raise AwsDashboardControlError(_schedule_update_error_message(exc)) from exc
+        except BotoCoreError as exc:
+            raise AwsDashboardControlError(
+                "Could not update the AWS schedule. Check credentials and IAM permissions."
             ) from exc
 
 
