@@ -1,19 +1,23 @@
 import os
+from datetime import date, datetime, time, timedelta
 from typing import Any
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from dotenv import load_dotenv
 import psycopg
 from psycopg.rows import dict_row
 
 
+DASHBOARD_TIMEZONE_NAME = "America/New_York"
+DASHBOARD_TIMEZONE = ZoneInfo(DASHBOARD_TIMEZONE_NAME)
+
+
 class PostgresDashboardRepositoryError(RuntimeError):
     """Raised when dashboard data cannot be loaded from PostgreSQL."""
 
 
-class PostgresDashboardRepositoryConfigurationError(
-    PostgresDashboardRepositoryError
-):
+class PostgresDashboardRepositoryConfigurationError(PostgresDashboardRepositoryError):
     """Raised when dashboard database configuration is missing."""
 
 
@@ -67,6 +71,23 @@ class PostgresDashboardRepository:
             END
             """,
             (run_id,),
+        )
+
+    def get_runs_for_date(self, selected_date: date) -> list[dict[str, Any]]:
+        start_at = datetime.combine(selected_date, time.min, DASHBOARD_TIMEZONE)
+        end_at = datetime.combine(
+            selected_date + timedelta(days=1),
+            time.min,
+            DASHBOARD_TIMEZONE,
+        )
+        return self._fetch_all(
+            """
+            SELECT id, started_at, finished_at, status, duration_seconds
+            FROM runs
+            WHERE started_at >= %s AND started_at < %s
+            ORDER BY started_at ASC
+            """,
+            (start_at, end_at),
         )
 
     def get_recent_runs(self, limit: int = 10) -> list[dict[str, Any]]:

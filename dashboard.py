@@ -1,4 +1,4 @@
-from datetime import datetime, time, timezone
+from datetime import date, datetime, time
 from decimal import Decimal
 
 import streamlit as st
@@ -8,6 +8,7 @@ from ai_editorial_team.infrastructure.aws.dashboard_control import (
     AwsDashboardControlError,
 )
 from ai_editorial_team.infrastructure.persistence.postgres_dashboard_repository import (
+    DASHBOARD_TIMEZONE,
     PostgresDashboardRepository,
     PostgresDashboardRepositoryError,
 )
@@ -44,6 +45,7 @@ def _render_editorial_data() -> None:
     _render_last_run(latest_run, stories, publications_by_platform)
     _render_latest_stories(stories)
     _render_publishing_status(publications_by_platform)
+    _render_previous_posts(repository)
     _render_recent_runs(recent_runs)
 
 
@@ -165,9 +167,17 @@ def _render_last_run(latest_run, stories, publications_by_platform) -> None:
 
 
 def _render_latest_stories(stories) -> None:
-    st.header("Latest Stories")
+    _render_stories(
+        stories,
+        heading="Latest Stories",
+        empty_message="No stories were stored for the latest run.",
+    )
+
+
+def _render_stories(stories, *, heading: str, empty_message: str) -> None:
+    st.header(heading)
     if not stories:
-        st.info("No stories were stored for the latest run.")
+        st.info(empty_message)
         return
 
     for story in stories:
@@ -179,8 +189,12 @@ def _render_latest_stories(stories) -> None:
                 st.write(story["editorial_reason"])
 
 
-def _render_publishing_status(publications_by_platform) -> None:
-    st.header("Publishing Status")
+def _render_publishing_status(
+    publications_by_platform,
+    *,
+    heading: str = "Publishing Status",
+) -> None:
+    st.header(heading)
     instagram_column, x_column = st.columns(2)
     with instagram_column:
         _render_publication("Instagram", publications_by_platform.get("instagram"))
@@ -200,6 +214,60 @@ def _render_publication(label, publication) -> None:
             st.link_button("Open publication", publication["url"])
         if publication["published_at"]:
             st.write(f"Published: {_format_datetime(publication['published_at'])}")
+
+
+def _render_previous_posts(repository: PostgresDashboardRepository) -> None:
+    st.header("Previous Posts")
+    selected_date = st.date_input(
+        "Select date",
+        value=datetime.now(DASHBOARD_TIMEZONE).date(),
+        max_value=datetime.now(DASHBOARD_TIMEZONE).date(),
+        key="previous_posts_date",
+    )
+    if not isinstance(selected_date, date):
+        return
+
+    try:
+        runs = repository.get_runs_for_date(selected_date)
+    except PostgresDashboardRepositoryError as exc:
+        st.error(str(exc))
+        return
+
+    if not runs:
+        st.info("No posts found for this date.")
+        return
+
+    selected_run = runs[0]
+    if len(runs) > 1:
+        selected_index = st.selectbox(
+            "Select run time",
+            options=range(len(runs)),
+            format_func=lambda index: _format_run_option(runs[index]),
+            key="previous_posts_run",
+        )
+        if selected_index is not None:
+            selected_run = runs[selected_index]
+
+    try:
+        stories = repository.get_stories(selected_run["id"])
+        publications = repository.get_publications(selected_run["id"])
+    except PostgresDashboardRepositoryError as exc:
+        st.error(str(exc))
+        return
+
+    publications_by_platform = {
+        publication["platform"].lower(): publication for publication in publications
+    }
+    st.caption(f"Run started: {_format_datetime(selected_run['started_at'])}")
+    _render_stories(
+        stories,
+        heading="Selected Day's Stories",
+        empty_message="No stories were stored for this run.",
+    )
+    _render_publishing_status(
+        publications_by_platform,
+        heading="Selected Day's Publishing Status",
+    )
 
 
 def _render_recent_runs(recent_runs) -> None:
@@ -232,7 +300,7 @@ def _display_status(status: str | None) -> str:
 def _format_datetime(value: datetime | None) -> str:
     if value is None:
         return "—"
-    return value.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+    return value.astimezone(DASHBOARD_TIMEZONE).strftime("%Y-%m-%d %H:%M:%S %Z")
 
 
 def _format_duration(value: Decimal | float | None) -> str:
@@ -243,6 +311,14 @@ def _format_duration(value: Decimal | float | None) -> str:
 
 def _format_posting_time(value: time) -> str:
     return value.strftime("%I:%M %p").lstrip("0")
+
+
+def _format_run_option(run) -> str:
+    started_at = run["started_at"].astimezone(DASHBOARD_TIMEZONE)
+    return (
+        f"{started_at.strftime('%I:%M %p').lstrip('0')} "
+        f"{started_at.strftime('%Z')} · {_display_status(run['status'])}"
+    )
 
 
 if __name__ == "__main__":

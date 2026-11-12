@@ -1,5 +1,5 @@
 import unittest
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from unittest.mock import MagicMock, patch
 from uuid import UUID
@@ -8,6 +8,7 @@ import psycopg
 from psycopg.rows import dict_row
 
 from ai_editorial_team.infrastructure.persistence.postgres_dashboard_repository import (
+    DASHBOARD_TIMEZONE,
     PostgresDashboardRepository,
     PostgresDashboardRepositoryError,
 )
@@ -112,6 +113,75 @@ class PostgresDashboardRepositoryTests(unittest.TestCase):
         "ai_editorial_team.infrastructure.persistence."
         "postgres_dashboard_repository.psycopg.connect"
     )
+    def test_get_runs_for_date_returns_one_run_with_timezone_safe_boundaries(
+        self,
+        connect,
+    ):
+        _, cursor = _mock_connection(connect)
+        expected = [{"id": RUN_ID, "started_at": STARTED_AT}]
+        cursor.fetchall.return_value = expected
+        repository = PostgresDashboardRepository("postgresql://test")
+
+        actual = repository.get_runs_for_date(date(2026, 11, 1))
+
+        statement, parameters = cursor.execute.call_args.args
+        start_at, end_at = parameters
+        self.assertIs(actual, expected)
+        self.assertIn("FROM runs", statement)
+        self.assertIn("started_at >= %s", statement)
+        self.assertIn("started_at < %s", statement)
+        self.assertIn("ORDER BY started_at ASC", statement)
+        self.assertEqual(start_at.tzinfo, DASHBOARD_TIMEZONE)
+        self.assertEqual(end_at.tzinfo, DASHBOARD_TIMEZONE)
+        self.assertEqual(
+            start_at.astimezone(timezone.utc),
+            datetime(2026, 11, 1, 4, tzinfo=timezone.utc),
+        )
+        self.assertEqual(
+            end_at.astimezone(timezone.utc),
+            datetime(2026, 11, 2, 5, tzinfo=timezone.utc),
+        )
+
+    @patch(
+        "ai_editorial_team.infrastructure.persistence."
+        "postgres_dashboard_repository.psycopg.connect"
+    )
+    def test_get_runs_for_date_returns_multiple_runs_in_chronological_order(
+        self,
+        connect,
+    ):
+        _, cursor = _mock_connection(connect)
+        expected = [
+            {"id": RUN_ID, "started_at": STARTED_AT},
+            {
+                "id": UUID("87654321-4321-8765-4321-876543218765"),
+                "started_at": STARTED_AT.replace(hour=18),
+            },
+        ]
+        cursor.fetchall.return_value = expected
+        repository = PostgresDashboardRepository("postgresql://test")
+
+        actual = repository.get_runs_for_date(date(2026, 11, 10))
+
+        statement = cursor.execute.call_args.args[0]
+        self.assertIs(actual, expected)
+        self.assertIn("ORDER BY started_at ASC", statement)
+
+    @patch(
+        "ai_editorial_team.infrastructure.persistence."
+        "postgres_dashboard_repository.psycopg.connect"
+    )
+    def test_get_runs_for_date_returns_empty_list(self, connect):
+        _, cursor = _mock_connection(connect)
+        cursor.fetchall.return_value = []
+        repository = PostgresDashboardRepository("postgresql://test")
+
+        self.assertEqual(repository.get_runs_for_date(date(2026, 11, 9)), [])
+
+    @patch(
+        "ai_editorial_team.infrastructure.persistence."
+        "postgres_dashboard_repository.psycopg.connect"
+    )
     def test_get_recent_runs_returns_platform_statuses_and_limits_results(
         self,
         connect,
@@ -153,6 +223,7 @@ class PostgresDashboardRepositoryTests(unittest.TestCase):
         self.assertIsNone(repository.get_latest_run())
         self.assertEqual(repository.get_stories(RUN_ID), [])
         self.assertEqual(repository.get_publications(RUN_ID), [])
+        self.assertEqual(repository.get_runs_for_date(date(2026, 11, 10)), [])
         self.assertEqual(repository.get_recent_runs(), [])
 
     @patch(
