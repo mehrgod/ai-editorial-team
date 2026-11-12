@@ -1,8 +1,12 @@
-from datetime import datetime, timezone
+from datetime import datetime, time, timezone
 from decimal import Decimal
 
 import streamlit as st
 
+from ai_editorial_team.infrastructure.aws.dashboard_control import (
+    AwsDashboardControl,
+    AwsDashboardControlError,
+)
 from ai_editorial_team.infrastructure.persistence.postgres_dashboard_repository import (
     PostgresDashboardRepository,
     PostgresDashboardRepositoryError,
@@ -12,7 +16,12 @@ from ai_editorial_team.infrastructure.persistence.postgres_dashboard_repository 
 def main() -> None:
     st.set_page_config(page_title="AI Editorial Team Dashboard", layout="wide")
     st.title("AI Editorial Team Dashboard")
+    _initialize_session_state()
+    _render_editorial_data()
+    _render_workflow_controls()
 
+
+def _render_editorial_data() -> None:
     try:
         repository = PostgresDashboardRepository.from_env()
         latest_run = repository.get_latest_run()
@@ -29,14 +38,110 @@ def main() -> None:
         return
 
     publications_by_platform = {
-        publication["platform"].lower(): publication
-        for publication in publications
+        publication["platform"].lower(): publication for publication in publications
     }
 
     _render_last_run(latest_run, stories, publications_by_platform)
     _render_latest_stories(stories)
     _render_publishing_status(publications_by_platform)
     _render_recent_runs(recent_runs)
+
+
+def _render_workflow_controls() -> None:
+    st.header("Workflow Controls")
+    try:
+        control = AwsDashboardControl.from_default_credentials()
+    except AwsDashboardControlError as exc:
+        st.error(str(exc))
+        return
+
+    schedule_column, run_column = st.columns(2)
+    with schedule_column:
+        _render_schedule_control(control)
+    with run_column:
+        _render_run_now_control(control)
+
+
+def _render_schedule_control(control: AwsDashboardControl) -> None:
+    with st.container(border=True):
+        st.subheader("Schedule")
+        try:
+            schedule = control.get_schedule()
+        except AwsDashboardControlError as exc:
+            st.error(str(exc))
+            return
+
+        st.caption("Current schedule expression")
+        st.code(schedule.expression)
+        st.caption(f"Timezone: {schedule.timezone}")
+        st.text(
+            "Current posting time: "
+            f"{_format_posting_time(schedule.posting_time)} ({schedule.timezone})"
+        )
+
+        with st.form("schedule_time_form", border=False):
+            posting_time = st.time_input(
+                "Posting time",
+                value=schedule.posting_time,
+                step=60,
+            )
+            save_schedule = st.form_submit_button(
+                "Save Schedule",
+                type="primary",
+            )
+
+        if save_schedule and posting_time is not None:
+            try:
+                updated = control.update_schedule_time(posting_time)
+            except AwsDashboardControlError as exc:
+                st.error(str(exc))
+            else:
+                st.success(
+                    "Schedule updated to "
+                    f"{_format_posting_time(updated.posting_time)} "
+                    f"({updated.timezone})."
+                )
+
+
+def _render_run_now_control(control: AwsDashboardControl) -> None:
+    with st.container(border=True):
+        st.subheader("Run Now")
+        st.caption("Start one Fargate task without waiting for it to finish.")
+        st.button(
+            "Run Now",
+            key="run_now_button",
+            type="primary",
+            on_click=_queue_run_now_request,
+        )
+
+        request_id = st.session_state.get("run_now_request_id", 0)
+        processed_id = st.session_state.get("run_now_processed_id", 0)
+        if not _has_pending_run_now_request(request_id, processed_id):
+            return
+        st.session_state["run_now_processed_id"] = request_id
+
+        try:
+            task_arn = control.run_now()
+        except AwsDashboardControlError as exc:
+            st.error(str(exc))
+        else:
+            st.success("AWS accepted the ECS task request.")
+            if task_arn:
+                st.caption("Task ARN")
+                st.code(task_arn)
+
+
+def _initialize_session_state() -> None:
+    st.session_state.setdefault("run_now_request_id", 0)
+    st.session_state.setdefault("run_now_processed_id", 0)
+
+
+def _queue_run_now_request() -> None:
+    st.session_state["run_now_request_id"] += 1
+
+
+def _has_pending_run_now_request(request_id: int, processed_id: int) -> bool:
+    return request_id > processed_id
 
 
 def _render_last_run(latest_run, stories, publications_by_platform) -> None:
@@ -109,7 +214,7 @@ def _render_recent_runs(recent_runs) -> None:
         }
         for run in recent_runs
     ]
-    st.dataframe(table_rows, hide_index=True, use_container_width=True)
+    st.dataframe(table_rows, hide_index=True)
 
 
 def _publication_status(publication) -> str:
@@ -134,6 +239,10 @@ def _format_duration(value: Decimal | float | None) -> str:
     if value is None:
         return "—"
     return f"{float(value):.2f} s"
+
+
+def _format_posting_time(value: time) -> str:
+    return value.strftime("%I:%M %p").lstrip("0")
 
 
 if __name__ == "__main__":
