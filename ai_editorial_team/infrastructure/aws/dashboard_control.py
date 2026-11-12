@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from datetime import time
+from datetime import datetime, time
 import re
 from typing import Any
 
@@ -40,6 +40,41 @@ class ScheduleDetails:
     timezone: str
     posting_time: time
     state: str
+
+
+@dataclass(frozen=True)
+class EcsTaskStatus:
+    task_arn: str
+    last_status: str
+    desired_status: str | None
+    created_at: datetime | None
+    started_at: datetime | None
+    stopped_at: datetime | None
+    stop_code: str | None
+    stopped_reason: str | None
+    container_exit_code: int | None
+    container_reason: str | None
+
+    @property
+    def completed_successfully(self) -> bool | None:
+        if self.last_status != "STOPPED":
+            return None
+        return self.container_exit_code == 0
+
+    @property
+    def failure_reason(self) -> str | None:
+        if self.completed_successfully is not False:
+            return None
+
+        details = []
+        if self.container_exit_code is not None:
+            details.append(f"Container exited with code {self.container_exit_code}.")
+        reason = self.container_reason or self.stopped_reason or self.stop_code
+        if reason:
+            details.append(reason)
+        if not details:
+            details.append("The task stopped without a successful container exit code.")
+        return " ".join(details)
 
 
 @dataclass(frozen=True)
@@ -152,6 +187,41 @@ class AwsDashboardControl:
                 "AWS accepted the request but did not return a started ECS task."
             )
         return tasks[0].get("taskArn")
+
+    def get_task_status(self, task_arn: str) -> EcsTaskStatus:
+        try:
+            response = self.ecs_client.describe_tasks(
+                cluster=ECS_CLUSTER,
+                tasks=[task_arn],
+            )
+        except ClientError as exc:
+            raise AwsDashboardControlError(_ecs_describe_error_message(exc)) from exc
+        except BotoCoreError as exc:
+            raise AwsDashboardControlError(
+                "Could not refresh the ECS task status. Check credentials and IAM "
+                "permissions."
+            ) from exc
+
+        tasks = response.get("tasks", [])
+        if not tasks:
+            raise AwsDashboardControlError(
+                "No ECS task was found for the stored Task ARN."
+            )
+
+        task = tasks[0]
+        container = _task_container(task.get("containers", []))
+        return EcsTaskStatus(
+            task_arn=task.get("taskArn", task_arn),
+            last_status=task.get("lastStatus", "UNKNOWN"),
+            desired_status=task.get("desiredStatus"),
+            created_at=task.get("createdAt"),
+            started_at=task.get("startedAt"),
+            stopped_at=task.get("stoppedAt"),
+            stop_code=task.get("stopCode"),
+            stopped_reason=task.get("stoppedReason"),
+            container_exit_code=container.get("exitCode") if container else None,
+            container_reason=container.get("reason") if container else None,
+        )
 
     def _get_schedule_response(self) -> dict[str, Any]:
         try:
@@ -272,3 +342,31 @@ def _ecs_run_error_message(exc: ClientError) -> str:
     if code:
         return f"Could not start the ECS workflow. AWS returned {code}."
     return "Could not start the ECS workflow. Check credentials and IAM permissions."
+
+
+def _ecs_describe_error_message(exc: ClientError) -> str:
+    error = exc.response.get("Error", {})
+    code = error.get("Code")
+    if code in {"AccessDenied", "AccessDeniedException"}:
+        return (
+            "Could not refresh the ECS task status: the current AWS identity needs "
+            "ecs:DescribeTasks permission."
+        )
+    if code:
+        return f"Could not refresh the ECS task status. AWS returned {code}."
+    return (
+        "Could not refresh the ECS task status. Check credentials and IAM permissions."
+    )
+
+
+def _task_container(containers: list[dict[str, Any]]) -> dict[str, Any] | None:
+    if not containers:
+        return None
+    return next(
+        (
+            container
+            for container in containers
+            if container.get("exitCode") is not None or container.get("reason")
+        ),
+        containers[0],
+    )

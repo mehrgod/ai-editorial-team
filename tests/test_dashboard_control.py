@@ -14,6 +14,7 @@ from ai_editorial_team.infrastructure.aws.dashboard_control import (
     SCHEDULE_NAME,
     AwsDashboardControl,
     AwsDashboardControlError,
+    EcsTaskStatus,
     ScheduleDetails,
     parse_daily_cron_time,
     rebuild_daily_cron_expression,
@@ -60,6 +61,7 @@ SCHEDULE_RESPONSE = {
     },
 }
 DASHBOARD_PATH = Path(__file__).resolve().parents[1] / "dashboard.py"
+TASK_ARN = "arn:aws:ecs:us-east-1:123456789012:task/example"
 
 
 class AwsDashboardControlTests(unittest.TestCase):
@@ -197,13 +199,12 @@ class AwsDashboardControlTests(unittest.TestCase):
 
     def test_run_now_uses_expected_ecs_configuration(self):
         ecs = Mock()
-        task_arn = "arn:aws:ecs:us-east-1:123456789012:task/example"
-        ecs.run_task.return_value = {"tasks": [{"taskArn": task_arn}], "failures": []}
+        ecs.run_task.return_value = {"tasks": [{"taskArn": TASK_ARN}], "failures": []}
         control = AwsDashboardControl(scheduler_client=Mock(), ecs_client=ecs)
 
         actual = control.run_now()
 
-        self.assertEqual(actual, task_arn)
+        self.assertEqual(actual, TASK_ARN)
         ecs.run_task.assert_called_once_with(
             cluster=ECS_CLUSTER,
             taskDefinition=ECS_TASK_DEFINITION,
@@ -217,6 +218,169 @@ class AwsDashboardControlTests(unittest.TestCase):
             },
             count=1,
         )
+
+    def test_describe_task_maps_provisioning_status_and_fields(self):
+        ecs = Mock()
+        created_at = datetime(2026, 11, 12, 15, tzinfo=timezone.utc)
+        ecs.describe_tasks.return_value = {
+            "tasks": [
+                {
+                    "taskArn": TASK_ARN,
+                    "lastStatus": "PROVISIONING",
+                    "desiredStatus": "RUNNING",
+                    "createdAt": created_at,
+                    "containers": [{"name": "editorial-team"}],
+                }
+            ],
+            "failures": [],
+        }
+        control = AwsDashboardControl(scheduler_client=Mock(), ecs_client=ecs)
+
+        actual = control.get_task_status(TASK_ARN)
+
+        ecs.describe_tasks.assert_called_once_with(
+            cluster=ECS_CLUSTER,
+            tasks=[TASK_ARN],
+        )
+        self.assertEqual(actual.task_arn, TASK_ARN)
+        self.assertEqual(actual.last_status, "PROVISIONING")
+        self.assertEqual(actual.desired_status, "RUNNING")
+        self.assertEqual(actual.created_at, created_at)
+        self.assertIsNone(actual.completed_successfully)
+
+    def test_describe_task_maps_running_status(self):
+        ecs = Mock()
+        started_at = datetime(2026, 11, 12, 15, 1, tzinfo=timezone.utc)
+        ecs.describe_tasks.return_value = {
+            "tasks": [
+                {
+                    "taskArn": TASK_ARN,
+                    "lastStatus": "RUNNING",
+                    "desiredStatus": "RUNNING",
+                    "startedAt": started_at,
+                }
+            ]
+        }
+        control = AwsDashboardControl(scheduler_client=Mock(), ecs_client=ecs)
+
+        actual = control.get_task_status(TASK_ARN)
+
+        self.assertEqual(actual.last_status, "RUNNING")
+        self.assertEqual(actual.started_at, started_at)
+        self.assertIsNone(actual.completed_successfully)
+
+    def test_stopped_task_with_zero_exit_code_is_successful(self):
+        ecs = Mock()
+        stopped_at = datetime(2026, 11, 12, 15, 5, tzinfo=timezone.utc)
+        ecs.describe_tasks.return_value = {
+            "tasks": [
+                {
+                    "taskArn": TASK_ARN,
+                    "lastStatus": "STOPPED",
+                    "desiredStatus": "STOPPED",
+                    "stoppedAt": stopped_at,
+                    "stopCode": "EssentialContainerExited",
+                    "containers": [{"exitCode": 0}],
+                }
+            ]
+        }
+        control = AwsDashboardControl(scheduler_client=Mock(), ecs_client=ecs)
+
+        actual = control.get_task_status(TASK_ARN)
+
+        self.assertEqual(actual.last_status, "STOPPED")
+        self.assertEqual(actual.stopped_at, stopped_at)
+        self.assertEqual(actual.stop_code, "EssentialContainerExited")
+        self.assertEqual(actual.container_exit_code, 0)
+        self.assertTrue(actual.completed_successfully)
+        self.assertIsNone(actual.failure_reason)
+
+    def test_stopped_task_with_nonzero_exit_code_surfaces_container_reason(self):
+        ecs = Mock()
+        ecs.describe_tasks.return_value = {
+            "tasks": [
+                {
+                    "taskArn": TASK_ARN,
+                    "lastStatus": "STOPPED",
+                    "desiredStatus": "STOPPED",
+                    "stoppedReason": "Essential container exited",
+                    "containers": [
+                        {
+                            "exitCode": 1,
+                            "reason": "Application process failed",
+                        }
+                    ],
+                }
+            ]
+        }
+        control = AwsDashboardControl(scheduler_client=Mock(), ecs_client=ecs)
+
+        actual = control.get_task_status(TASK_ARN)
+
+        self.assertFalse(actual.completed_successfully)
+        self.assertEqual(actual.container_exit_code, 1)
+        self.assertEqual(actual.container_reason, "Application process failed")
+        self.assertIn("code 1", actual.failure_reason)
+        self.assertIn("Application process failed", actual.failure_reason)
+
+    def test_stopped_task_surfaces_task_reason_when_container_reason_is_missing(self):
+        ecs = Mock()
+        ecs.describe_tasks.return_value = {
+            "tasks": [
+                {
+                    "taskArn": TASK_ARN,
+                    "lastStatus": "STOPPED",
+                    "desiredStatus": "STOPPED",
+                    "stoppedReason": "Task failed to start",
+                    "containers": [],
+                }
+            ]
+        }
+        control = AwsDashboardControl(scheduler_client=Mock(), ecs_client=ecs)
+
+        actual = control.get_task_status(TASK_ARN)
+
+        self.assertFalse(actual.completed_successfully)
+        self.assertIn("Task failed to start", actual.failure_reason)
+
+    def test_describe_task_surfaces_missing_task(self):
+        ecs = Mock()
+        ecs.describe_tasks.return_value = {
+            "tasks": [],
+            "failures": [{"arn": TASK_ARN, "reason": "MISSING"}],
+        }
+        control = AwsDashboardControl(scheduler_client=Mock(), ecs_client=ecs)
+
+        with self.assertRaises(AwsDashboardControlError) as context:
+            control.get_task_status(TASK_ARN)
+
+        self.assertEqual(
+            str(context.exception),
+            "No ECS task was found for the stored Task ARN.",
+        )
+
+    def test_describe_task_surfaces_aws_errors_without_sensitive_details(self):
+        ecs = Mock()
+        ecs.describe_tasks.side_effect = ClientError(
+            {
+                "Error": {
+                    "Code": "AccessDeniedException",
+                    "Message": "sensitive AWS response",
+                }
+            },
+            "DescribeTasks",
+        )
+        control = AwsDashboardControl(scheduler_client=Mock(), ecs_client=ecs)
+
+        with self.assertRaises(AwsDashboardControlError) as context:
+            control.get_task_status(TASK_ARN)
+
+        self.assertEqual(
+            str(context.exception),
+            "Could not refresh the ECS task status: the current AWS identity needs "
+            "ecs:DescribeTasks permission.",
+        )
+        self.assertNotIn("sensitive", str(context.exception))
 
     def test_aws_client_errors_are_surfaced_without_sensitive_details(self):
         scheduler = Mock()
@@ -355,7 +519,8 @@ class AwsDashboardControlTests(unittest.TestCase):
             posting_time=time(12),
             state="ENABLED",
         )
-        control.run_now.return_value = "arn:aws:ecs:us-east-1:123456789012:task/example"
+        control.run_now.return_value = TASK_ARN
+        control.get_task_status.return_value = _task_status("PROVISIONING")
 
         with patch(
             "ai_editorial_team.infrastructure.persistence."
@@ -372,6 +537,53 @@ class AwsDashboardControlTests(unittest.TestCase):
 
         self.assertFalse(app.exception)
         control.run_now.assert_called_once_with()
+        control.get_task_status.assert_called_once_with(TASK_ARN)
+        self.assertEqual(app.session_state["current_task_arn"], TASK_ARN)
+        self.assertEqual(
+            app.session_state["current_task_status"].last_status,
+            "PROVISIONING",
+        )
+        self.assertTrue(
+            any(text.value == "Task status: PROVISIONING" for text in app.text)
+        )
+
+    def test_refresh_status_keeps_task_arn_and_does_not_run_another_task(self):
+        repository = Mock()
+        repository.get_latest_run.return_value = None
+        control = Mock()
+        control.get_schedule.return_value = ScheduleDetails(
+            expression="cron(0 12 * * ? *)",
+            timezone="America/New_York",
+            posting_time=time(12),
+            state="ENABLED",
+        )
+        control.get_task_status.return_value = _task_status("RUNNING")
+
+        with patch(
+            "ai_editorial_team.infrastructure.persistence."
+            "postgres_dashboard_repository.PostgresDashboardRepository.from_env",
+            return_value=repository,
+        ), patch(
+            "ai_editorial_team.infrastructure.aws."
+            "dashboard_control.AwsDashboardControl.from_default_credentials",
+            return_value=control,
+        ):
+            app = AppTest.from_file(str(DASHBOARD_PATH))
+            app.session_state["current_task_arn"] = TASK_ARN
+            app.session_state["current_task_status"] = _task_status("PROVISIONING")
+            app.run(timeout=10)
+            app.button(key="refresh_task_status_button").click().run(timeout=10)
+            app.run(timeout=10)
+
+        self.assertFalse(app.exception)
+        control.run_now.assert_not_called()
+        control.get_task_status.assert_called_once_with(TASK_ARN)
+        self.assertEqual(app.session_state["current_task_arn"], TASK_ARN)
+        self.assertEqual(
+            app.session_state["current_task_status"].last_status,
+            "RUNNING",
+        )
+        self.assertTrue(any(text.value == "Task status: RUNNING" for text in app.text))
 
     def test_enabled_schedule_shows_disable_action_and_one_click_updates_once(self):
         repository = Mock()
@@ -470,6 +682,21 @@ def _expected_schedule_update_request():
             "Target",
         )
     }
+
+
+def _task_status(last_status: str, *, exit_code: int | None = None) -> EcsTaskStatus:
+    return EcsTaskStatus(
+        task_arn=TASK_ARN,
+        last_status=last_status,
+        desired_status="STOPPED" if last_status == "STOPPED" else "RUNNING",
+        created_at=datetime(2026, 11, 12, 15, tzinfo=timezone.utc),
+        started_at=None,
+        stopped_at=None,
+        stop_code=None,
+        stopped_reason=None,
+        container_exit_code=exit_code,
+        container_reason=None,
+    )
 
 
 if __name__ == "__main__":

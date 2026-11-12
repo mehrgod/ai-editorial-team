@@ -6,6 +6,7 @@ import streamlit as st
 from ai_editorial_team.infrastructure.aws.dashboard_control import (
     AwsDashboardControl,
     AwsDashboardControlError,
+    EcsTaskStatus,
 )
 from ai_editorial_team.infrastructure.persistence.postgres_dashboard_repository import (
     DASHBOARD_TIMEZONE,
@@ -142,24 +143,66 @@ def _render_run_now_control(control: AwsDashboardControl) -> None:
 
         request_id = st.session_state.get("run_now_request_id", 0)
         processed_id = st.session_state.get("run_now_processed_id", 0)
-        if not _has_pending_run_now_request(request_id, processed_id):
-            return
-        st.session_state["run_now_processed_id"] = request_id
+        status_error = None
+        if _has_pending_run_now_request(request_id, processed_id):
+            st.session_state["run_now_processed_id"] = request_id
 
-        try:
-            task_arn = control.run_now()
-        except AwsDashboardControlError as exc:
-            st.error(str(exc))
-        else:
+            try:
+                task_arn = control.run_now()
+            except AwsDashboardControlError as exc:
+                st.error(str(exc))
+            else:
+                if task_arn:
+                    st.session_state["current_task_arn"] = task_arn
+                    st.session_state["current_task_status"] = None
+                    try:
+                        initial_task_status = control.get_task_status(task_arn)
+                    except AwsDashboardControlError as exc:
+                        status_error = str(exc)
+                    else:
+                        st.session_state["current_task_status"] = initial_task_status
+
+        stored_task_arn = st.session_state.get("current_task_arn")
+        task_arn = stored_task_arn if isinstance(stored_task_arn, str) else None
+        stored_task_status = st.session_state.get("current_task_status")
+        task_status = (
+            stored_task_status
+            if isinstance(stored_task_status, EcsTaskStatus)
+            else None
+        )
+        if task_arn is not None:
             st.success("AWS accepted the ECS task request.")
-            if task_arn:
-                st.caption("Task ARN")
-                st.code(task_arn)
+            status_container = st.empty()
+            st.caption("Task ARN")
+            st.code(task_arn)
+            if st.button("Refresh Status", key="refresh_task_status_button"):
+                try:
+                    task_status = control.get_task_status(task_arn)
+                except AwsDashboardControlError as exc:
+                    status_error = str(exc)
+                else:
+                    st.session_state["current_task_status"] = task_status
+
+            with status_container.container():
+                if status_error:
+                    st.error(status_error)
+                elif task_status:
+                    _render_task_status(task_status)
+
+
+def _render_task_status(task_status: EcsTaskStatus) -> None:
+    st.text(f"Task status: {task_status.last_status}")
+    if task_status.completed_successfully is True:
+        st.success("Task completed successfully.")
+    elif task_status.completed_successfully is False:
+        st.error(f"Task failed: {task_status.failure_reason}")
 
 
 def _initialize_session_state() -> None:
     st.session_state.setdefault("run_now_request_id", 0)
     st.session_state.setdefault("run_now_processed_id", 0)
+    st.session_state.setdefault("current_task_arn", None)
+    st.session_state.setdefault("current_task_status", None)
 
 
 def _queue_run_now_request() -> None:
